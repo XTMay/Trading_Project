@@ -1,0 +1,1526 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-Hans" xml:lang="zh-Hans"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.27">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Trading Project Team">
+<meta name="dcterms.date" content="2026-02-25">
+
+<title>事件层入口分析报告</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="event-entry-analysis_files/libs/clipboard/clipboard.min.js"></script>
+<script src="event-entry-analysis_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="event-entry-analysis_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="event-entry-analysis_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="event-entry-analysis_files/libs/quarto-html/popper.min.js"></script>
+<script src="event-entry-analysis_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="event-entry-analysis_files/libs/quarto-html/anchor.min.js"></script>
+<link href="event-entry-analysis_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="event-entry-analysis_files/libs/quarto-html/quarto-syntax-highlighting-ed96de9b727972fe78a7b5d16c58bf87.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="event-entry-analysis_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="event-entry-analysis_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="event-entry-analysis_files/libs/bootstrap/bootstrap-790280a9dc14a0ef3629ebb49602f3d6.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="event-entry-analysis_files/libs/quarto-diagram/mermaid.min.js"></script>
+<script src="event-entry-analysis_files/libs/quarto-diagram/mermaid-init.js"></script>
+<link href="event-entry-analysis_files/libs/quarto-diagram/mermaid.css" rel="stylesheet">
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">目录</h2>
+   
+  <ul>
+  <li><a href="#sec-detection" id="toc-sec-detection" class="nav-link active" data-scroll-target="#sec-detection"><span class="header-section-number">1</span> 事件检测结果</a>
+  <ul class="collapse">
+  <li><a href="#事件存在性总表" id="toc-事件存在性总表" class="nav-link" data-scroll-target="#事件存在性总表"><span class="header-section-number">1.1</span> 事件存在性总表</a></li>
+  </ul></li>
+  <li><a href="#sec-entry" id="toc-sec-entry" class="nav-link" data-scroll-target="#sec-entry"><span class="header-section-number">2</span> 系统启动入口</a>
+  <ul class="collapse">
+  <li><a href="#自动触发入口打开工作簿时" id="toc-自动触发入口打开工作簿时" class="nav-link" data-scroll-target="#自动触发入口打开工作簿时"><span class="header-section-number">2.1</span> 自动触发入口（打开工作簿时）</a>
+  <ul class="collapse">
+  <li><a href="#入口-①-workbook_open" id="toc-入口-①-workbook_open" class="nav-link" data-scroll-target="#入口-①-workbook_open"><span class="header-section-number">2.1.1</span> 入口 ① — <code>Workbook_Open</code></a></li>
+  <li><a href="#入口-②-auto_open" id="toc-入口-②-auto_open" class="nav-link" data-scroll-target="#入口-②-auto_open"><span class="header-section-number">2.1.2</span> 入口 ② — <code>Auto_open</code></a></li>
+  <li><a href="#入口-③-workbook_beforesave" id="toc-入口-③-workbook_beforesave" class="nav-link" data-scroll-target="#入口-③-workbook_beforesave"><span class="header-section-number">2.1.3</span> 入口 ③ — <code>Workbook_BeforeSave</code></a></li>
+  </ul></li>
+  <li><a href="#用户交互入口worksheet_change" id="toc-用户交互入口worksheet_change" class="nav-link" data-scroll-target="#用户交互入口worksheet_change"><span class="header-section-number">2.2</span> 用户交互入口（Worksheet_Change）</a>
+  <ul class="collapse">
+  <li><a href="#sheet1台股-最复杂的入口" id="toc-sheet1台股-最复杂的入口" class="nav-link" data-scroll-target="#sheet1台股-最复杂的入口"><span class="header-section-number">2.2.1</span> Sheet1（台股）— 最复杂的入口</a></li>
+  <li><a href="#sheet25-统一模式" id="toc-sheet25-统一模式" class="nav-link" data-scroll-target="#sheet25-统一模式"><span class="header-section-number">2.2.2</span> Sheet2~5 — 统一模式</a></li>
+  </ul></li>
+  </ul></li>
+  <li><a href="#sec-manual" id="toc-sec-manual" class="nav-link" data-scroll-target="#sec-manual"><span class="header-section-number">3</span> 手动触发入口（Macro 宏）</a>
+  <ul class="collapse">
+  <li><a href="#完整-macro-入口清单" id="toc-完整-macro-入口清单" class="nav-link" data-scroll-target="#完整-macro-入口清单"><span class="header-section-number">3.1</span> 完整 Macro 入口清单</a></li>
+  </ul></li>
+  <li><a href="#sec-callgraph" id="toc-sec-callgraph" class="nav-link" data-scroll-target="#sec-callgraph"><span class="header-section-number">4</span> 第一层调用关系总图</a></li>
+  <li><a href="#sec-anomalies" id="toc-sec-anomalies" class="nav-link" data-scroll-target="#sec-anomalies"><span class="header-section-number">5</span> 异常发现</a></li>
+  <li><a href="#sec-conclusion" id="toc-sec-conclusion" class="nav-link" data-scroll-target="#sec-conclusion"><span class="header-section-number">6</span> 结论：系统从哪里开始？</a></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">事件层入口分析报告</h1>
+<p class="subtitle lead">盈再表 VBA 系统 — 系统从哪里开始？</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">作者</div>
+    <div class="quarto-title-meta-contents">
+             <p>Trading Project Team </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">发布于</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">2026-02-25</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="sec-detection" class="level1" data-number="1">
+<h1 data-number="1"><span class="header-section-number">1</span> 事件检测结果</h1>
+<p>对项目中所有 <code>.cls</code>（Workbook / Sheet 对象）和 <code>.frm</code>（UserForm）文件进行扫描，检测标准 VBA 事件处理器。</p>
+<section id="事件存在性总表" class="level2" data-number="1.1">
+<h2 data-number="1.1" class="anchored" data-anchor-id="事件存在性总表"><span class="header-section-number">1.1</span> 事件存在性总表</h2>
+<div id="tbl-events" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-events-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;1: 事件检测清单
+</figcaption>
+<div aria-describedby="tbl-events-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>事件类型</th>
+<th style="text-align: center;">是否存在</th>
+<th>所在文件</th>
+<th style="text-align: center;">数量</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Workbook_Open</code></td>
+<td style="text-align: center;"><strong>Y</strong></td>
+<td>ThisWorkbook_7.cls</td>
+<td style="text-align: center;">1</td>
+</tr>
+<tr class="even">
+<td><code>Workbook_BeforeSave</code></td>
+<td style="text-align: center;"><strong>Y</strong></td>
+<td>ThisWorkbook_7.cls</td>
+<td style="text-align: center;">1</td>
+</tr>
+<tr class="odd">
+<td><code>Auto_Open</code></td>
+<td style="text-align: center;"><strong>Y</strong></td>
+<td>shared_modules.bas</td>
+<td style="text-align: center;">1</td>
+</tr>
+<tr class="even">
+<td><code>Worksheet_Change</code></td>
+<td style="text-align: center;"><strong>Y</strong></td>
+<td>Sheet1~5.cls</td>
+<td style="text-align: center;">5</td>
+</tr>
+<tr class="odd">
+<td><code>Worksheet_Activate</code></td>
+<td style="text-align: center;">N</td>
+<td>—</td>
+<td style="text-align: center;">0</td>
+</tr>
+<tr class="even">
+<td><code>Worksheet_SelectionChange</code></td>
+<td style="text-align: center;">N</td>
+<td>—</td>
+<td style="text-align: center;">0</td>
+</tr>
+<tr class="odd">
+<td><code>CommandButton_Click</code></td>
+<td style="text-align: center;">N</td>
+<td>—</td>
+<td style="text-align: center;">0</td>
+</tr>
+<tr class="even">
+<td><code>UserForm_Initialize</code></td>
+<td style="text-align: center;">N</td>
+<td>—</td>
+<td style="text-align: center;">0</td>
+</tr>
+<tr class="odd">
+<td>任何 UserForm 事件</td>
+<td style="text-align: center;">N</td>
+<td>—</td>
+<td style="text-align: center;">0</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="callout callout-style-default callout-important callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">重要</span>关键发现
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<ul>
+<li>系统<strong>只有 8 个事件处理器</strong>，全部集中在 2 个文件中（ThisWorkbook_7 + Sheet1~5）</li>
+<li><strong>UserForm1~5 全部为空壳</strong>：.frm 文件代码区无任何 Sub/Function</li>
+<li><strong>没有任何按钮点击事件</strong>：UI 交互完全依赖单元格编辑触发 <code>Worksheet_Change</code></li>
+<li>Sheet6~9、Sheet01、Worksheet___1<sub>6、ThisWorkbook_1</sub>6 <strong>均无代码</strong></li>
+</ul>
+</div>
+</div>
+</section>
+</section>
+<section id="sec-entry" class="level1" data-number="2">
+<h1 data-number="2"><span class="header-section-number">2</span> 系统启动入口</h1>
+<p>系统有 <strong>3 个自动触发入口</strong> 和 <strong>1 类手动触发入口</strong>。</p>
+<section id="自动触发入口打开工作簿时" class="level2" data-number="2.1">
+<h2 data-number="2.1" class="anchored" data-anchor-id="自动触发入口打开工作簿时"><span class="header-section-number">2.1</span> 自动触发入口（打开工作簿时）</h2>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-boot" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-boot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-boot">sequenceDiagram
+    participant User as 用户
+    participant Excel as Excel Runtime
+    participant WB as ThisWorkbook_7
+    participant SM as shared_modules
+
+    User-&gt;&gt;Excel: 打开 盈再表250723.xlsm
+    Excel-&gt;&gt;WB: ① Workbook_Open()
+    activate WB
+    WB-&gt;&gt;WB: 禁用 BackgroundChecking
+    WB-&gt;&gt;WB: 隐藏 External Data 工具栏
+    WB-&gt;&gt;WB: 禁用 AutoRecover
+    WB-&gt;&gt;WB: 禁用 AskToUpdateLinks
+    WB-&gt;&gt;SM: Delete_Connection_XL2003()
+    WB-&gt;&gt;WB: QueryTablesDelete("all")
+    WB-&gt;&gt;WB: 配置 MaxChange / RemoteRef / Precision
+    WB-&gt;&gt;WB: 禁用全部 AutoCorrect
+    deactivate WB
+    Excel-&gt;&gt;SM: ② Auto_open()
+    activate SM
+    SM-&gt;&gt;SM: Sheets("台股").[ZZ1] = """"
+    SM-&gt;&gt;SM: Sheets("美股").[ZZ1] = """"
+    deactivate SM
+    Note right of SM: 启动完成，等待用户交互
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-boot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;1: 系统启动序列
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<section id="入口-①-workbook_open" class="level3" data-number="2.1.1">
+<h3 data-number="2.1.1" class="anchored" data-anchor-id="入口-①-workbook_open"><span class="header-section-number">2.1.1</span> 入口 ① — <code>Workbook_Open</code></h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>属性</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>文件</strong></td>
+<td><code>ThisWorkbook_7.cls:10</code></td>
+</tr>
+<tr class="even">
+<td><strong>修饰符</strong></td>
+<td><code>Private Sub</code></td>
+</tr>
+<tr class="odd">
+<td><strong>触发时机</strong></td>
+<td>工作簿打开时自动执行</td>
+</tr>
+<tr class="even">
+<td><strong>错误处理</strong></td>
+<td><code>On Error Resume Next</code>（静默）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>第一层调用：</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 42%">
+<col style="width: 28%">
+<col style="width: 28%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>调用目标</th>
+<th>来源</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Delete_Connection_XL2003</code></td>
+<td>shared_modules.bas</td>
+<td>删除旧版 Excel 数据连接</td>
+</tr>
+<tr class="even">
+<td><code>QueryTablesDelete("all")</code></td>
+<td>ThisWorkbook_7.cls:44 (本文件)</td>
+<td>清除所有工作表的 QueryTable</td>
+</tr>
+</tbody>
+</table>
+<p><strong>直接设置的 Application 属性：</strong></p>
+<pre><code>Application.ErrorCheckingOptions.BackgroundChecking = False
+Application.CommandBars("External Data").Visible = False
+Application.AutoRecover.Enabled = False
+Application.AskToUpdateLinks = False
+Application.MaxChange = 0.001
+Application.AutoCorrect.* = False  (6项全关)
+ActiveWorkbook.UpdateRemoteReferences = False
+ActiveWorkbook.PrecisionAsDisplayed = False
+ActiveWorkbook.SaveLinkValues = False</code></pre>
+</section>
+<section id="入口-②-auto_open" class="level3" data-number="2.1.2">
+<h3 data-number="2.1.2" class="anchored" data-anchor-id="入口-②-auto_open"><span class="header-section-number">2.1.2</span> 入口 ② — <code>Auto_open</code></h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>属性</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>文件</strong></td>
+<td><code>shared_modules.bas:242</code></td>
+</tr>
+<tr class="even">
+<td><strong>修饰符</strong></td>
+<td><code>Sub</code>（Public，VBA 自动识别）</td>
+</tr>
+<tr class="odd">
+<td><strong>触发时机</strong></td>
+<td>工作簿打开后自动执行</td>
+</tr>
+</tbody>
+</table>
+<p><strong>第一层调用：</strong> 无函数调用。仅向两个 Sheet 的 ZZ1 单元格写入双引号字符。</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode vb code-with-copy"><code class="sourceCode monobasic"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">Sub </span>Auto_open()</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    Sheets(<span class="st">"台股"</span>).[zz1] = <span class="st">""""</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    Sheets(<span class="st">"美股"</span>).[zz1] = <span class="st">""""</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="kw">End Sub</span></span></code></pre></div><button title="复制到剪贴板" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+注记
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><code>Workbook_Open</code> 和 <code>Auto_open</code> 的执行顺序：Excel 先执行 <code>Workbook_Open</code>，再执行 <code>Auto_open</code>。两者共同构成完整的启动序列。</p>
+</div>
+</div>
+</section>
+<section id="入口-③-workbook_beforesave" class="level3" data-number="2.1.3">
+<h3 data-number="2.1.3" class="anchored" data-anchor-id="入口-③-workbook_beforesave"><span class="header-section-number">2.1.3</span> 入口 ③ — <code>Workbook_BeforeSave</code></h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>属性</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>文件</strong></td>
+<td><code>ThisWorkbook_7.cls:38</code></td>
+</tr>
+<tr class="even">
+<td><strong>修饰符</strong></td>
+<td><code>Private Sub</code></td>
+</tr>
+<tr class="odd">
+<td><strong>触发时机</strong></td>
+<td>用户保存工作簿前自动执行</td>
+</tr>
+</tbody>
+</table>
+<p><strong>第一层调用：</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 60%">
+<col style="width: 40%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>调用目标</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>QueryTablesDelete("all")</code></td>
+<td>保存前清除所有 QueryTable，避免保存无用连接</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="用户交互入口worksheet_change" class="level2" data-number="2.2">
+<h2 data-number="2.2" class="anchored" data-anchor-id="用户交互入口worksheet_change"><span class="header-section-number">2.2</span> 用户交互入口（Worksheet_Change）</h2>
+<p>这是系统的<strong>主交互路径</strong>——用户在某个市场 Sheet 的 <strong>A2 单元格</strong>输入股票代号，触发数据抓取。</p>
+<section id="sheet1台股-最复杂的入口" class="level3" data-number="2.2.1">
+<h3 data-number="2.2.1" class="anchored" data-anchor-id="sheet1台股-最复杂的入口"><span class="header-section-number">2.2.1</span> Sheet1（台股）— 最复杂的入口</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>属性</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>文件</strong></td>
+<td><code>Sheet1.cls:10</code></td>
+</tr>
+<tr class="even">
+<td><strong>触发条件</strong></td>
+<td>编辑台股 Sheet 的 A1 或 A2 单元格</td>
+</tr>
+<tr class="odd">
+<td><strong>Guard 条件</strong></td>
+<td>排除全行选中、Column &gt; 1、Row &gt; 2</td>
+</tr>
+</tbody>
+</table>
+<p><strong>第一层调用链：</strong></p>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-sheet1" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-sheet1-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-sheet1">flowchart TD
+    A["Worksheet_Change(Target)"] --&gt; B{"Guard 检查"}
+    B --&gt;|"整行选中 / 非A列 / Row&gt;2"| EXIT["Exit Sub"]
+    B --&gt;|通过| C["DisableEvents + UpdateScreen"]
+    C --&gt; D["findAll(Target.Text)"]
+    D --&gt; E{找到?}
+    E --&gt;|N| F["Stocklist()"]
+    F --&gt; G["findAll() 重试"]
+    G --&gt; H{找到?}
+    E --&gt;|Y| I["写入 A2=代号, A1=名称, A20=名称"]
+    H --&gt;|Y| I
+    H --&gt;|N| I2["跳过（静默）"]
+    I --&gt; J["Macro1()"]
+    I2 --&gt; J
+    J --&gt; K["EnableEvents"]
+    K --&gt; L["ProtectSheet(ActiveSheet)"]
+    L --&gt; M["Beep"]
+
+    style D fill:#e8f5e9,stroke:#388e3c
+    style F fill:#fff3e0,stroke:#f57c00
+    style J fill:#e3f2fd,stroke:#1565c0,stroke-width:3px
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-sheet1-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;2: Sheet1 Worksheet_Change 调用链
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 17%">
+<col style="width: 31%">
+<col style="width: 31%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: center;">序号</th>
+<th>调用目标</th>
+<th>所在模块</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: center;">1</td>
+<td><code>findAll(text)</code></td>
+<td>shared_modules.bas</td>
+<td>在股票数据库中查找代号/名称</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">2</td>
+<td><code>Stocklist()</code></td>
+<td>shared_modules.bas</td>
+<td>若未找到，刷新台股代号清单</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">3</td>
+<td><code>findAll(text)</code></td>
+<td>shared_modules.bas</td>
+<td>重试查找</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">4</td>
+<td><strong><code>Macro1()</code></strong></td>
+<td>Module1.bas</td>
+<td><strong>核心：台股11种财务数据抓取</strong></td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">5</td>
+<td><code>ProtectSheet(ActiveSheet)</code></td>
+<td>shared_modules.bas</td>
+<td>锁定工作表</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="sheet25-统一模式" class="level3" data-number="2.2.2">
+<h3 data-number="2.2.2" class="anchored" data-anchor-id="sheet25-统一模式"><span class="header-section-number">2.2.2</span> Sheet2~5 — 统一模式</h3>
+<p>Sheet2~5 采用<strong>完全相同的极简结构</strong>：</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode vb code-with-copy"><code class="sourceCode monobasic"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">Private</span> <span class="kw">Sub </span>Worksheet_Change(<span class="kw">ByVal</span> Target <span class="kw">As</span> Range)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">If </span>Target.Address &lt;&gt; <span class="st">"$A$2"</span> <span class="kw">Then</span> <span class="kw">Exit Sub   ' 仅监听 A2</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    Macro{N}                                     <span class="co">' 直接调用对应 Macro</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">Call</span> ProtectSheet(ActiveSheet)               <span class="co">' 锁定</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    Beep                                         <span class="co">' 提示音</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="kw">End Sub</span></span></code></pre></div><button title="复制到剪贴板" class="code-copy-button"><i class="bi"></i></button></div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 17%">
+<col style="width: 31%">
+<col style="width: 31%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Sheet</th>
+<th>文件</th>
+<th>Guard 条件</th>
+<th>第一层调用</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Sheet2（美股）</td>
+<td><code>Sheet2.cls:10</code></td>
+<td><code>Target.Address &lt;&gt; "$A$2"</code></td>
+<td><code>Macro2</code> → <code>ProtectSheet</code></td>
+</tr>
+<tr class="even">
+<td>Sheet3（港股）</td>
+<td><code>Sheet3.cls:10</code></td>
+<td><code>Target.Address &lt;&gt; "$A$2"</code></td>
+<td><code>Macro3</code> → <code>ProtectSheet</code></td>
+</tr>
+<tr class="odd">
+<td>Sheet4（中股）</td>
+<td><code>Sheet4.cls:10</code></td>
+<td><code>Target.Address &lt;&gt; "$A$2"</code></td>
+<td><code>Macro4</code> → <code>ProtectSheet</code></td>
+</tr>
+<tr class="even">
+<td>Sheet5（全球）</td>
+<td><code>Sheet5.cls:10</code></td>
+<td><code>Target.Address &lt;&gt; "$A$2"</code></td>
+<td><code>Macro5</code> → <code>ProtectSheet</code></td>
+</tr>
+</tbody>
+</table>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">提示</span>设计模式
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Sheet1 比 Sheet2~5 多了 <code>findAll</code> + <code>Stocklist</code> 的查找逻辑，因为台股支持通过股票名称（而非仅代号）触发查询。Sheet2~5 仅支持直接输入代号。</p>
+</div>
+</div>
+</section>
+</section>
+</section>
+<section id="sec-manual" class="level1" data-number="3">
+<h1 data-number="3"><span class="header-section-number">3</span> 手动触发入口（Macro 宏）</h1>
+<p>除事件驱动外，以下 <code>Sub</code> 可通过 Excel 宏菜单、工具栏按钮或快捷键手动调用：</p>
+<section id="完整-macro-入口清单" class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="完整-macro-入口清单"><span class="header-section-number">3.1</span> 完整 Macro 入口清单</h2>
+<div id="tbl-all-entries" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-all-entries-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;2: 全部可调用入口清单
+</figcaption>
+<div aria-describedby="tbl-all-entries-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 23%">
+<col style="width: 26%">
+<col style="width: 20%">
+<col style="width: 30%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Macro</th>
+<th>Module</th>
+<th>功能</th>
+<th>触发方式</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Macro1</code></td>
+<td>Module1</td>
+<td>台股数据抓取</td>
+<td>Sheet1 事件 <strong>+</strong> 手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro2</code></td>
+<td>Module2</td>
+<td>美股数据抓取</td>
+<td>Sheet2 事件 <strong>+</strong> 手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro3</code></td>
+<td>Module3</td>
+<td>港股数据抓取</td>
+<td>Sheet3 事件 <strong>+</strong> 手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro4</code></td>
+<td>Module4</td>
+<td>中股数据抓取</td>
+<td>Sheet4 事件 <strong>+</strong> 手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro5</code></td>
+<td>Module5</td>
+<td>全球数据抓取</td>
+<td>Sheet5 事件 <strong>+</strong> 手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro6</code></td>
+<td>Module5</td>
+<td>GDP 链接更新</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro8</code></td>
+<td>Module1</td>
+<td>缩放调整</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro9</code></td>
+<td>Module1</td>
+<td>视图调整</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro10</code></td>
+<td>Module6</td>
+<td>台股加权指数</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro11</code></td>
+<td>Module6</td>
+<td>S&amp;P 500 成分股</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro12</code></td>
+<td>Module6</td>
+<td>日经 225</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro13</code></td>
+<td>Module6</td>
+<td>恒生指数</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro14</code></td>
+<td>Module6</td>
+<td>沪深 180</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro15</code></td>
+<td>Module7</td>
+<td>保存台股到收藏</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro16</code></td>
+<td>Module7</td>
+<td>保存美股到收藏</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro17</code></td>
+<td>Module7</td>
+<td>保存港股到收藏</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro18</code></td>
+<td>Module7</td>
+<td>保存中股到收藏</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro19</code></td>
+<td>Module7</td>
+<td>保存全球到收藏</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro20</code></td>
+<td>Module7</td>
+<td>批量更新所有收藏</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro21</code></td>
+<td>Module7</td>
+<td>收藏相关操作</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro22</code></td>
+<td>Module7</td>
+<td>收藏相关操作</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro23</code></td>
+<td>Module7</td>
+<td>收藏相关操作</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro24</code></td>
+<td>Module7</td>
+<td>收藏相关操作</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro25</code></td>
+<td>Module7</td>
+<td>收藏相关操作</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro26</code></td>
+<td>Module7</td>
+<td>收藏相关操作</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro27</code></td>
+<td>Module7</td>
+<td>收藏相关操作</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro28</code></td>
+<td>Module7</td>
+<td>收藏相关操作</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro29</code></td>
+<td>Module7</td>
+<td>收藏相关操作</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro30</code></td>
+<td>Module8</td>
+<td>绩效计算</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro35</code></td>
+<td>Module8</td>
+<td>绩效相关</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro36</code></td>
+<td>Module8</td>
+<td>绩效相关</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro37</code></td>
+<td>Module8</td>
+<td>绩效相关</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>Macro40</code></td>
+<td>Module7</td>
+<td>收藏相关操作</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Macro41</code></td>
+<td>Module7</td>
+<td>收藏相关操作</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>tax</code></td>
+<td>Module9</td>
+<td>打开并处理税务文件</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>exdiv</code></td>
+<td>Module9</td>
+<td>除息税计算</td>
+<td>仅手动</td>
+</tr>
+<tr class="odd">
+<td><code>taxtb</code></td>
+<td>Module9</td>
+<td>税务表计算</td>
+<td>仅手动</td>
+</tr>
+<tr class="even">
+<td><code>Stocklist</code></td>
+<td>shared_modules</td>
+<td>刷新台股代号数据库</td>
+<td>Sheet1 事件内 <strong>+</strong> 手动</td>
+</tr>
+<tr class="odd">
+<td><code>enEvt</code></td>
+<td>shared_modules</td>
+<td>重新启用 Events</td>
+<td>仅手动（紧急恢复用）</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+</section>
+<section id="sec-callgraph" class="level1" data-number="4">
+<h1 data-number="4"><span class="header-section-number">4</span> 第一层调用关系总图</h1>
+<div class="cell" data-fig-width="100%" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-callgraph" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-callgraph-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-callgraph">graph LR
+    subgraph auto["自动触发（打开工作簿）"]
+        WO["Workbook_Open"]
+        AO["Auto_open"]
+        BS["Workbook_BeforeSave"]
+    end
+
+    subgraph sheet["用户交互（编辑A2单元格）"]
+        S1["Sheet1&lt;br/&gt;Worksheet_Change"]
+        S2["Sheet2&lt;br/&gt;Worksheet_Change"]
+        S3["Sheet3&lt;br/&gt;Worksheet_Change"]
+        S4["Sheet4&lt;br/&gt;Worksheet_Change"]
+        S5["Sheet5&lt;br/&gt;Worksheet_Change"]
+    end
+
+    subgraph manual["手动触发（宏菜单/按钮）"]
+        M6["Macro10~14"]
+        M7["Macro15~29,40,41"]
+        M8["Macro30,35~37"]
+        M9["tax / exdiv / taxtb"]
+    end
+
+    subgraph target["第一层调用目标"]
+        DC["Delete_Connection_XL2003"]
+        QT["QueryTablesDelete"]
+        FA["findAll"]
+        SL["Stocklist"]
+        PS["ProtectSheet"]
+        Mac1["Macro1&lt;br/&gt;(Module1 台股)"]
+        Mac2["Macro2&lt;br/&gt;(Module2 美股)"]
+        Mac3["Macro3&lt;br/&gt;(Module3 港股)"]
+        Mac4["Macro4&lt;br/&gt;(Module4 中股)"]
+        Mac5["Macro5&lt;br/&gt;(Module5 全球)"]
+    end
+
+    WO --&gt; DC
+    WO --&gt; QT
+    BS --&gt; QT
+
+    S1 --&gt; FA
+    S1 --&gt; SL
+    S1 --&gt; Mac1
+    S1 --&gt; PS
+    S2 --&gt; Mac2
+    S2 --&gt; PS
+    S3 --&gt; Mac3
+    S3 --&gt; PS
+    S4 --&gt; Mac4
+    S4 --&gt; PS
+    S5 --&gt; Mac5
+    S5 --&gt; PS
+
+    M7 --&gt;|"Macro20 批量更新"| Mac1
+    M7 --&gt;|"Macro20 批量更新"| Mac2
+    M7 --&gt;|"Macro20 批量更新"| Mac3
+    M7 --&gt;|"Macro20 批量更新"| Mac4
+    M7 --&gt;|"Macro20 批量更新"| Mac5
+
+    style auto fill:#fff3e0,stroke:#f57c00
+    style sheet fill:#e3f2fd,stroke:#1565c0
+    style manual fill:#f3e5f5,stroke:#7b1fa2
+    style target fill:#e8f5e9,stroke:#388e3c
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-callgraph-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;3: 事件层 → 第一层调用 完整关系图
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="sec-anomalies" class="level1" data-number="5">
+<h1 data-number="5"><span class="header-section-number">5</span> 异常发现</h1>
+<p>分析过程中发现以下需要注意的问题：</p>
+<div id="tbl-anomalies" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-anomalies-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;3: 异常发现列表
+</figcaption>
+<div aria-describedby="tbl-anomalies-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 12%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 37%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: center;">#</th>
+<th>异常</th>
+<th>详情</th>
+<th style="text-align: center;">风险等级</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: center;">1</td>
+<td><strong>JsonConverter.bas 名不副实</strong></td>
+<td>文件内容实为 Module8.bas 的副本（1204 行 vs 1205 行，仅缺 <code>Attribute VB_Name</code> 行）。不含任何 JSON 解析代码。</td>
+<td style="text-align: center;">高</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">2</td>
+<td><strong>Macro1 无条件执行</strong></td>
+<td>Sheet1.cls:44 — <code>Call Macro1</code> 在 <code>findAll</code> 未找到股票时仍然执行（上方注释掉了条件判断）</td>
+<td style="text-align: center;">中</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">3</td>
+<td><strong>Sheet1 vs Sheet2~5 不对称</strong></td>
+<td>Sheet1 有完整的查找逻辑（findAll + Stocklist 回退），Sheet2~5 无任何查找，直接调用 Macro</td>
+<td style="text-align: center;">低</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">4</td>
+<td><strong>Macro 编号不连续</strong></td>
+<td>缺少 Macro7、Macro31<sub>34、Macro38</sub>39。编号分配无规律。</td>
+<td style="text-align: center;">低</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">5</td>
+<td><strong>Auto_open 功能极简</strong></td>
+<td>仅向两个 Sheet 的 ZZ1 写入双引号，用途不明（可能是初始化标记）</td>
+<td style="text-align: center;">低</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">6</td>
+<td><strong>空壳文件过多</strong></td>
+<td>ThisWorkbook_1<sub>6、Sheet01、Sheet6</sub>9、Worksheet___1<sub>6、UserForm1</sub>5 — 共 22 个文件无代码</td>
+<td style="text-align: center;">低</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">警告</span>JsonConverter.bas 文件异常
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><code>JsonConverter.bas</code> 不是第三方 JSON 解析库，而是 <code>Module8.bas</code>（绩效计算）的<strong>重复副本</strong>。 如果代码中有 <code>JsonConverter.ParseJson</code> 调用，运行时将找不到该函数。 需确认：(a) 实际的 JSON 解析功能在哪里？(b) 是否已内联到 Module2 中？</p>
+</div>
+</div>
+</section>
+<section id="sec-conclusion" class="level1" data-number="6">
+<h1 data-number="6"><span class="header-section-number">6</span> 结论：系统从哪里开始？</h1>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-summary" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-summary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-summary">flowchart TB
+    subgraph A["Phase 1: 启动"]
+        direction TB
+        A1["① Workbook_Open&lt;br/&gt;&lt;small&gt;禁用特性 + 清理连接&lt;/small&gt;"]
+        A2["② Auto_open&lt;br/&gt;&lt;small&gt;写入初始化标记&lt;/small&gt;"]
+        A1 --&gt; A2
+    end
+
+    subgraph B["Phase 2: 等待用户"]
+        B1(("用户输入&lt;br/&gt;股票代号"))
+    end
+
+    subgraph C["Phase 3: 数据抓取"]
+        direction TB
+        C1["Sheet.Worksheet_Change"]
+        C2["Macro1~5"]
+        C3["HTTP 抓取 + 解析"]
+        C1 --&gt; C2 --&gt; C3
+    end
+
+    subgraph D["Phase 4: 进阶操作"]
+        D1["Macro15~19 保存收藏"]
+        D2["Macro20 批量更新"]
+        D3["Macro30 绩效计算"]
+        D4["tax/exdiv 税务"]
+    end
+
+    A --&gt; B --&gt; C
+    C --&gt; D
+
+    style A fill:#fff3e0,stroke:#f57c00
+    style B fill:#e3f2fd,stroke:#1565c0
+    style C fill:#e8f5e9,stroke:#388e3c
+    style D fill:#f3e5f5,stroke:#7b1fa2
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-summary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;4: 系统入口总结
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p><strong>一句话总结：</strong></p>
+<blockquote class="blockquote">
+<p>系统通过 <code>Workbook_Open</code> + <code>Auto_open</code> 完成静默初始化，随后进入等待状态。 用户在任一市场 Sheet 的 <strong>A2 单元格输入股票代号</strong>，触发 <code>Worksheet_Change</code> → <code>Macro{N}</code> 执行数据抓取。 其他高级功能（组合管理、绩效、税务）均为<strong>手动调用</strong>的独立宏。</p>
+</blockquote>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "已复制");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "已复制");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

@@ -1,0 +1,2020 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-Hans" xml:lang="zh-Hans"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.27">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Trading Project Team">
+<meta name="dcterms.date" content="2026-02-26">
+
+<title>系统执行流程与数据流分析</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="dataflow-analysis_files/libs/clipboard/clipboard.min.js"></script>
+<script src="dataflow-analysis_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="dataflow-analysis_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="dataflow-analysis_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="dataflow-analysis_files/libs/quarto-html/popper.min.js"></script>
+<script src="dataflow-analysis_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="dataflow-analysis_files/libs/quarto-html/anchor.min.js"></script>
+<link href="dataflow-analysis_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="dataflow-analysis_files/libs/quarto-html/quarto-syntax-highlighting-ed96de9b727972fe78a7b5d16c58bf87.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="dataflow-analysis_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="dataflow-analysis_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="dataflow-analysis_files/libs/bootstrap/bootstrap-790280a9dc14a0ef3629ebb49602f3d6.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="dataflow-analysis_files/libs/quarto-diagram/mermaid.min.js"></script>
+<script src="dataflow-analysis_files/libs/quarto-diagram/mermaid-init.js"></script>
+<link href="dataflow-analysis_files/libs/quarto-diagram/mermaid.css" rel="stylesheet">
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">目录</h2>
+   
+  <ul>
+  <li><a href="#sec-lifecycle" id="toc-sec-lifecycle" class="nav-link active" data-scroll-target="#sec-lifecycle"><span class="header-section-number">1</span> 系统完整生命周期</a></li>
+  <li><a href="#sec-boot" id="toc-sec-boot" class="nav-link" data-scroll-target="#sec-boot"><span class="header-section-number">2</span> Phase 0: 系统启动</a></li>
+  <li><a href="#sec-single" id="toc-sec-single" class="nav-link" data-scroll-target="#sec-single"><span class="header-section-number">3</span> Phase 1: 单股查询 — 主数据流</a>
+  <ul class="collapse">
+  <li><a href="#触发与查找" id="toc-触发与查找" class="nav-link" data-scroll-target="#触发与查找"><span class="header-section-number">3.1</span> 1.1 触发与查找</a></li>
+  <li><a href="#数据抓取macro1-台股完整流程" id="toc-数据抓取macro1-台股完整流程" class="nav-link" data-scroll-target="#数据抓取macro1-台股完整流程"><span class="header-section-number">3.2</span> 1.2 数据抓取（Macro1 — 台股完整流程）</a></li>
+  <li><a href="#各市场差异对照" id="toc-各市场差异对照" class="nav-link" data-scroll-target="#各市场差异对照"><span class="header-section-number">3.3</span> 1.3 各市场差异对照</a></li>
+  </ul></li>
+  <li><a href="#sec-batch" id="toc-sec-batch" class="nav-link" data-scroll-target="#sec-batch"><span class="header-section-number">4</span> Phase 2: 批量更新（Macro20）</a></li>
+  <li><a href="#sec-index" id="toc-sec-index" class="nav-link" data-scroll-target="#sec-index"><span class="header-section-number">5</span> Phase 3: 指数选股（Macro10~14）</a></li>
+  <li><a href="#sec-perf" id="toc-sec-perf" class="nav-link" data-scroll-target="#sec-perf"><span class="header-section-number">6</span> Phase 4: 绩效计算（Macro30）</a></li>
+  <li><a href="#sec-tax" id="toc-sec-tax" class="nav-link" data-scroll-target="#sec-tax"><span class="header-section-number">7</span> Phase 5: 税务计算</a></li>
+  <li><a href="#sec-pipeline" id="toc-sec-pipeline" class="nav-link" data-scroll-target="#sec-pipeline"><span class="header-section-number">8</span> 完整数据流管线</a>
+  <ul class="collapse">
+  <li><a href="#各阶段函数归属" id="toc-各阶段函数归属" class="nav-link" data-scroll-target="#各阶段函数归属"><span class="header-section-number">8.1</span> 各阶段函数归属</a></li>
+  </ul></li>
+  <li><a href="#sec-assessment" id="toc-sec-assessment" class="nav-link" data-scroll-target="#sec-assessment"><span class="header-section-number">9</span> 函数价值评估</a>
+  <ul class="collapse">
+  <li><a href="#核心函数不可删除" id="toc-核心函数不可删除" class="nav-link" data-scroll-target="#核心函数不可删除"><span class="header-section-number">9.1</span> 核心函数（不可删除）</a></li>
+  <li><a href="#可删除函数" id="toc-可删除函数" class="nav-link" data-scroll-target="#可删除函数"><span class="header-section-number">9.2</span> 可删除函数</a></li>
+  </ul></li>
+  <li><a href="#sec-refactor" id="toc-sec-refactor" class="nav-link" data-scroll-target="#sec-refactor"><span class="header-section-number">10</span> 重构重点区域</a>
+  <ul class="collapse">
+  <li><a href="#优先级排序" id="toc-优先级排序" class="nav-link" data-scroll-target="#优先级排序"><span class="header-section-number">10.1</span> 优先级排序</a></li>
+  <li><a href="#重构详细说明" id="toc-重构详细说明" class="nav-link" data-scroll-target="#重构详细说明"><span class="header-section-number">10.2</span> 重构详细说明</a>
+  <ul class="collapse">
+  <li><a href="#p0-抽离-module2-公共函数最高优先级" id="toc-p0-抽离-module2-公共函数最高优先级" class="nav-link" data-scroll-target="#p0-抽离-module2-公共函数最高优先级"><span class="header-section-number">10.2.1</span> P0: 抽离 Module2 公共函数（最高优先级）</a></li>
+  <li><a href="#p1-统一-yahoo-历史价格" id="toc-p1-统一-yahoo-历史价格" class="nav-link" data-scroll-target="#p1-统一-yahoo-历史价格"><span class="header-section-number">10.2.2</span> P1: 统一 Yahoo 历史价格</a></li>
+  <li><a href="#p2-url-配置外部化" id="toc-p2-url-配置外部化" class="nav-link" data-scroll-target="#p2-url-配置外部化"><span class="header-section-number">10.2.3</span> P2: URL 配置外部化</a></li>
+  </ul></li>
+  </ul></li>
+  <li><a href="#sec-appendix" id="toc-sec-appendix" class="nav-link" data-scroll-target="#sec-appendix"><span class="header-section-number">11</span> 附录: 完整函数索引</a>
+  <ul class="collapse">
+  <li><a href="#按数据管线阶段分类" id="toc-按数据管线阶段分类" class="nav-link" data-scroll-target="#按数据管线阶段分类"><span class="header-section-number">11.1</span> 按数据管线阶段分类</a></li>
+  </ul></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">系统执行流程与数据流分析</h1>
+<p class="subtitle lead">盈再表 VBA 系统 — 从启动到写入的完整路径</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">作者</div>
+    <div class="quarto-title-meta-contents">
+             <p>Trading Project Team </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">发布于</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">2026-02-26</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="sec-lifecycle" class="level1" data-number="1">
+<h1 data-number="1"><span class="header-section-number">1</span> 系统完整生命周期</h1>
+<div class="cell" data-fig-width="100%" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-lifecycle" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-lifecycle-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-lifecycle">stateDiagram-v2
+    [*] --&gt; Boot: 打开 .xlsm
+
+    state Boot {
+        WO: Workbook_Open()
+        AO: Auto_open()
+        WO --&gt; AO
+    }
+
+    Boot --&gt; Idle: 初始化完成
+
+    state Idle {
+        [*] --&gt; WaitInput: 等待用户操作
+    }
+
+    Idle --&gt; SingleQuery: 编辑 A2 单元格
+    Idle --&gt; BatchUpdate: 手动 Macro20
+    Idle --&gt; IndexScreen: 手动 Macro10~14
+    Idle --&gt; Performance: 手动 Macro30
+    Idle --&gt; Tax: 手动 tax/exdiv
+    Idle --&gt; SaveToFav: 手动 Macro15~19
+
+    state SingleQuery {
+        SC: Worksheet_Change
+        FA: findAll()
+        MN: Macro1~5
+        SC --&gt; FA
+        FA --&gt; MN
+    }
+
+    state BatchUpdate {
+        Loop: 遍历收藏列表
+        CallMN: 依次调用 Macro1~5
+        Merge: 合并结果到收藏
+        Loop --&gt; CallMN
+        CallMN --&gt; Merge
+    }
+
+    SingleQuery --&gt; Idle: Beep 完成
+    BatchUpdate --&gt; Idle
+    IndexScreen --&gt; Idle
+    Performance --&gt; Idle
+    Tax --&gt; Idle
+    SaveToFav --&gt; Idle
+
+    Idle --&gt; Save: 用户保存
+    Save --&gt; Idle: BeforeSave 清理 QueryTables
+
+    Idle --&gt; [*]: 关闭工作簿
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-lifecycle-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;1: 系统从启动到退出的完整生命周期
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="sec-boot" class="level1" data-number="2">
+<h1 data-number="2"><span class="header-section-number">2</span> Phase 0: 系统启动</h1>
+<pre><code>系统启动（打开 盈再表250723.xlsm）
+  │
+  ├─① Workbook_Open()                          [ThisWorkbook_7.cls]
+  │   ├── 禁用 BackgroundChecking
+  │   ├── 隐藏 External Data 工具栏
+  │   ├── 禁用 AutoRecover
+  │   ├── 禁用 AskToUpdateLinks
+  │   ├── Delete_Connection_XL2003()            → 清除所有旧版数据连接
+  │   ├── QueryTablesDelete("all")              → 清除所有 QueryTable
+  │   ├── 配置 MaxChange / RemoteRef / Precision
+  │   └── 禁用全部 AutoCorrect（6项）
+  │
+  └─② Auto_open()                              [shared_modules.bas]
+      ├── Sheets("台股").[ZZ1] = """"           → 初始化标记
+      └── Sheets("美股").[ZZ1] = """"           → 初始化标记</code></pre>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">注记</span>启动目的
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>关闭所有可能干扰自动化抓取的 Excel 特性（链接更新弹窗、自动恢复、错误检查）， 清除上次残留的网络查询连接，确保干净状态。</p>
+</div>
+</div>
+</section>
+<section id="sec-single" class="level1" data-number="3">
+<h1 data-number="3"><span class="header-section-number">3</span> Phase 1: 单股查询 — 主数据流</h1>
+<p>这是系统最核心、最常用的路径。以<strong>台股</strong>为完整示例（美/港/中/全球结构相同）。</p>
+<section id="触发与查找" class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="触发与查找"><span class="header-section-number">3.1</span> 1.1 触发与查找</h2>
+<pre><code>用户在台股 Sheet A2 输入股票代号（如 "2330"）
+  │
+  ▼
+Sheet1.Worksheet_Change(Target)                 [Sheet1.cls]
+  │
+  ├── Guard: 排除整行选中 / 非A列 / Row&gt;2
+  ├── 禁用 Events + ScreenUpdating
+  │
+  ├── findAll("2330")                           [shared_modules.bas]
+  │   ├── 在 Worksheets("工作表1").Columns(1) 中 .Find()
+  │   ├── 解析: "2330 台積電" → theCode="2330", theName="台積電"
+  │   └── 写入全局变量 theIndustry
+  │
+  ├── 若未找到:
+  │   ├── Stocklist()                           [shared_modules.bas]
+  │   │   ├── QueryTables → twse.com.tw/isin (strMode=2)  上市股代号
+  │   │   ├── 清洗: 删除 ETF/TDR/注释行
+  │   │   ├── QueryTables → twse.com.tw/isin (strMode=4)  上柜股代号
+  │   │   ├── 清洗: 删除非股票行
+  │   │   └── 合并+去重 → 写入 Worksheets("工作表1")
+  │   └── findAll("2330") 重试
+  │
+  ├── 写入: [A2]=代号, [A1]=名称+代号+产业, [A20]=名称
+  │
+  ▼
+  Call Macro1()</code></pre>
+</section>
+<section id="数据抓取macro1-台股完整流程" class="level2" data-number="3.2">
+<h2 data-number="3.2" class="anchored" data-anchor-id="数据抓取macro1-台股完整流程"><span class="header-section-number">3.2</span> 1.2 数据抓取（Macro1 — 台股完整流程）</h2>
+<pre><code>Macro1()                                        [Module1.bas]
+  │
+  ├── UnprotectSheet(ActiveSheet)               [shared_modules]
+  ├── 初始化列偏移量:
+  │   dc1=75  dc2=32  dc6=87  dc7=98  dc8=103  dc10=120  dc11=130
+  ├── 清除旧数据: Range("af:eq").Clear
+  ├── RSURLTYPE()  → 随机选择 MoneyDJ 镜像域名
+  │
+  │  ┌─────────────────────────────────────────────────────────────┐
+  │  │            11 种数据抓取（按顺序执行）                        │
+  │  ├─────────────────────────────────────────────────────────────┤
+  │  │                                                             │
+  │  │  ❶ 基本资料 (dc1)                                          │
+  │  │    ├─ 来源: moneydj.com.tw/z/zc/zca/zca_{code}.djhtm      │
+  │  │    ├─ 抓取: TSECFSQT(url, Cells(2,dc), "1")               │
+  │  │    │   └─ QueryTables.Add → .Refresh → .ResultRange        │
+  │  │    ├─ 写入: Cells(2, dc1) 起始区域                          │
+  │  │    └─ 错误: ERRLOG → 追加到 V47                             │
+  │  │                                                             │
+  │  │  ❷ 除息日资料 (dc1)                                        │
+  │  │    ├─ 来源: moneydj.com.tw/z/zc/zci/zci_{code}.djhtm      │
+  │  │    ├─ 抓取: TSECFSQT(url, Cells, "1")                     │
+  │  │    └─ 写入: 同区域偏移                                      │
+  │  │                                                             │
+  │  │  ❸❹ 季度损益表（单体 + 合并）                                │
+  │  │    ├─ 来源: moneydj.com.tw/z/zc/zcq/zcq_{code}.djhtm     │
+  │  │    ├─ 抓取: TWReport(url, dc)                              │
+  │  │    │   ├─ MSXML2.XMLHTTP.Open("GET", url)                  │
+  │  │    │   ├─ HTMLDocument.body.innerHTML = response            │
+  │  │    │   ├─ getElementById("oScrollHead") → 解析表头          │
+  │  │    │   └─ getElementsByTagName("table") → 逐行解析写入      │
+  │  │    ├─ 清洗: SEASONTF(dc) → 季度日期格式标准化               │
+  │  │    └─ 写入: dc1 偏移列区域                                   │
+  │  │                                                             │
+  │  │  ❺❻ 季度资产负债表（单体 + 合并）                            │
+  │  │    ├─ 来源: moneydj.com.tw/z/zc/zcp/zcpa/...              │
+  │  │    ├─ 抓取: TWReport(url, dc)                              │
+  │  │    └─ 清洗: SEASONTF(dc)                                   │
+  │  │                                                             │
+  │  │  ❼❽ 年度损益表（单体 + 合并）                                │
+  │  │    ├─ 来源: moneydj.com.tw/z/zc/zcq/zcqa/...              │
+  │  │    ├─ 抓取: TWReport(url, dc)                              │
+  │  │    └─ 清洗: YEARTF(dc) → 年度日期格式标准化                  │
+  │  │                                                             │
+  │  │  ❾❿ 年度资产负债表（单体 + 合并）                            │
+  │  │    ├─ 来源: moneydj.com.tw/z/zc/zcp/zcpb/...              │
+  │  │    ├─ 抓取: TWReport(url, dc)                              │
+  │  │    └─ 清洗: YEARTF(dc)                                     │
+  │  │                                                             │
+  │  │  ⓫ 获利 / 代号 / 股东 / 转让 / 营收（dc2~dc8）              │
+  │  │    ├─ 来源: moneydj.com.tw (5个不同 endpoint)              │
+  │  │    ├─ 抓取: TSECFSQT × 5 次                                │
+  │  │    └─ 写入: dc2=32, dc6=87, dc7=98, dc8=103 各列区域       │
+  │  │                                                             │
+  │  │  ⓬ 历史股价 (dc10=120)                                     │
+  │  │    ├─ 来源A: twse.com.tw (上市)                             │
+  │  │    ├─ 来源B: twse.com.tw (上柜/FMNPTK)                     │
+  │  │    ├─ 抓取: TSECFSQT × 2 次                                │
+  │  │    └─ 写入: dc10=120 列区域                                  │
+  │  │                                                             │
+  │  │  ⓭ OTC 月统计 (dc11=130)                                   │
+  │  │    ├─ 来源: tpex.org.tw (POST 请求)                        │
+  │  │    ├─ 抓取: OTC(cd$, dc)                                   │
+  │  │    │   ├─ MSXML2.XMLHTTP → POST 表单数据                   │
+  │  │    │   ├─ HTMLDocument → getElementsByTagName("table")     │
+  │  │    │   └─ 逐行逐列解析 → 写入 Cells                        │
+  │  │    └─ 写入: dc11=130 列区域                                  │
+  │  │                                                             │
+  │  └─────────────────────────────────────────────────────────────┘
+  │
+  ├── 创建超链接: Yahoo / MoneyDJ / GDP / Blog
+  ├── QueryTablesDelete(ActiveSheet.Name)       → 清除本轮查询连接
+  ├── Delete_Pictures                           → 删除内嵌图片
+  │
+  ▼
+返回 Sheet1.Worksheet_Change
+  ├── EnableEvents = True
+  ├── ScreenUpdating = True
+  ├── ProtectSheet(ActiveSheet)                 → 锁定工作表
+  └── Beep                                     → 提示完成</code></pre>
+</section>
+<section id="各市场差异对照" class="level2" data-number="3.3">
+<h2 data-number="3.3" class="anchored" data-anchor-id="各市场差异对照"><span class="header-section-number">3.3</span> 1.3 各市场差异对照</h2>
+<div id="tbl-market-diff" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-market-diff-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;1: 各市场数据流差异对照
+</figcaption>
+<div aria-describedby="tbl-market-diff-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 8%">
+<col style="width: 18%">
+<col style="width: 18%">
+<col style="width: 18%">
+<col style="width: 18%">
+<col style="width: 18%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>阶段</th>
+<th>台股 Module1</th>
+<th>美股 Module2</th>
+<th>港股 Module3</th>
+<th>中股 Module4</th>
+<th>全球 Module5</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>触发</strong></td>
+<td>Sheet1.Change</td>
+<td>Sheet2.Change</td>
+<td>Sheet3.Change</td>
+<td>Sheet4.Change</td>
+<td>Sheet5.Change</td>
+</tr>
+<tr class="even">
+<td><strong>查找</strong></td>
+<td>findAll+Stocklist</td>
+<td>无（直接代号）</td>
+<td>无</td>
+<td>无</td>
+<td>无</td>
+</tr>
+<tr class="odd">
+<td><strong>代号转换</strong></td>
+<td>无</td>
+<td>mkw/wsj/yho</td>
+<td>Format(0000)</td>
+<td>直接</td>
+<td>yhondd 映射</td>
+</tr>
+<tr class="even">
+<td><strong>财报来源</strong></td>
+<td>MoneyDJ</td>
+<td>MarketWatch/WSJ</td>
+<td>AAStocks</td>
+<td>Sina Finance</td>
+<td>WSJ</td>
+</tr>
+<tr class="odd">
+<td><strong>财报抓取</strong></td>
+<td>TSECFSQT+TWReport</td>
+<td>ConnectMarketWatch</td>
+<td>ConnectMarketWatch</td>
+<td>QueryTables.Add</td>
+<td>ConnectMarketWatch</td>
+</tr>
+<tr class="even">
+<td><strong>财报解析</strong></td>
+<td>HTML DOM</td>
+<td>HTML DOM+unitconv</td>
+<td>直接表格</td>
+<td>直接表格</td>
+<td>HTML DOM+unitconv</td>
+</tr>
+<tr class="odd">
+<td><strong>历史价格</strong></td>
+<td>TSECFSQT(TWSE)</td>
+<td>Yahoo V8 JSON</td>
+<td>Yahoo CSV</td>
+<td>Yahoo CSV</td>
+<td>Yahoo CSV</td>
+</tr>
+<tr class="even">
+<td><strong>价格解析</strong></td>
+<td>直接</td>
+<td>ParseJson+HandleNulls</td>
+<td>XMLHTTP+Split</td>
+<td>XMLHTTP+Split</td>
+<td>XMLHTTP+Split</td>
+</tr>
+<tr class="odd">
+<td><strong>高低价调整</strong></td>
+<td>无</td>
+<td>highlow+splitt</td>
+<td>highlow+splitt</td>
+<td>highlow+splitt</td>
+<td>highlow+splitt</td>
+</tr>
+<tr class="even">
+<td><strong>汇率</strong></td>
+<td>无（TWD）</td>
+<td>Wise.com</td>
+<td>Wise.com</td>
+<td>无</td>
+<td>Wise.com</td>
+</tr>
+<tr class="odd">
+<td><strong>公司概况</strong></td>
+<td>TSECFSQT</td>
+<td>ConnectMarketWatch</td>
+<td>ConnectMarketWatch</td>
+<td>ConnectMarketWatch</td>
+<td>ConnectMarketWatch</td>
+</tr>
+<tr class="even">
+<td><strong>数据类型数</strong></td>
+<td>11~13</td>
+<td>10+</td>
+<td>8</td>
+<td>8</td>
+<td>10+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+</section>
+<section id="sec-batch" class="level1" data-number="4">
+<h1 data-number="4"><span class="header-section-number">4</span> Phase 2: 批量更新（Macro20）</h1>
+<pre><code>手动触发 Macro20()                              [Module7.bas]
+  │
+  ├── UnprotectSheet(ActiveSheet)
+  │
+  ├── 遍历收藏 Sheet 每一行（i = 2 to 最后行）:
+  │   │
+  │   ├── 读取: Cells(i, 22~39) → 股票代号 + 市场类型
+  │   │
+  │   ├── 判断市场:
+  │   │   ├── 台股 → Sheets("台股").Activate → [A2]=代号 → 触发 Macro1
+  │   │   ├── 美股 → Sheets("美股").Activate → [A2]=代号 → 触发 Macro2
+  │   │   ├── 港股 → Sheets("港股").Activate → [A2]=代号 → 触发 Macro3
+  │   │   ├── 中股 → Sheets("中股").Activate → [A2]=代号 → 触发 Macro4
+  │   │   └── 全球 → Sheets("全球").Activate → [A2]=代号 → 触发 Macro5
+  │   │
+  │   ├── Application.Wait（等待抓取完成）
+  │   ├── 切换回收藏 Sheet
+  │   │
+  │   ├── w2k(i)                                → 从市场 Sheet 提取关键指标
+  │   │   ├── 读取: 市场Sheet Cells(行, 列)
+  │   │   └── 写入: 收藏Sheet Cells(i, 22~39)
+  │   │
+  │   └── addlink()                             → 添加超链接
+  │
+  ├── fm7()                                     → 格式化收藏表
+  ├── ProtectSheet(ActiveSheet)
+  └── Beep</code></pre>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-batch-flow" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-batch-flow-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-batch-flow">flowchart TD
+    Start["Macro20 启动"] --&gt; Loop{"遍历收藏列表"}
+
+    Loop --&gt;|"行 i"| Read["读取 Cells(i) 代号+市场"]
+    Read --&gt; Switch{"市场?"}
+
+    Switch --&gt;|台| A1["切换台股Sheet → A2=代号"]
+    Switch --&gt;|美| A2["切换美股Sheet → A2=代号"]
+    Switch --&gt;|港| A3["切换港股Sheet → A2=代号"]
+    Switch --&gt;|中| A4["切换中股Sheet → A2=代号"]
+    Switch --&gt;|全球| A5["切换全球Sheet → A2=代号"]
+
+    A1 --&gt; Trigger["Worksheet_Change 自动触发"]
+    A2 --&gt; Trigger
+    A3 --&gt; Trigger
+    A4 --&gt; Trigger
+    A5 --&gt; Trigger
+
+    Trigger --&gt; Macro["Macro1~5 执行抓取"]
+    Macro --&gt; Wait["Application.Wait"]
+    Wait --&gt; Extract["w2k(i) 提取关键指标"]
+    Extract --&gt; WriteBack["写回收藏Sheet"]
+    WriteBack --&gt; Loop
+
+    Loop --&gt;|"全部完成"| Format["fm7() 格式化"]
+    Format --&gt; Done["Beep 完成"]
+
+    style Trigger fill:#fff3e0,stroke:#f57c00
+    style Macro fill:#e8f5e9,stroke:#388e3c
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-batch-flow-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;2: 批量更新数据流
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="sec-index" class="level1" data-number="5">
+<h1 data-number="5"><span class="header-section-number">5</span> Phase 3: 指数选股（Macro10~14）</h1>
+<pre><code>手动触发 Macro10()                              [Module6.bas] — 台股加权
+  │
+  ├── UnprotectSheet
+  ├── 清除: Columns("i:r, ba:cz, ha:hg").Clear
+  │
+  ├── ❶ TWSE 上市 P/E 数据
+  │   ├─ 来源: twse.com.tw/exchangeReport/BWIBBU_d (全部上市)
+  │   ├─ 抓取: ConnectMarketWatch(url, [ba1], 5)
+  │   ├─ 解析: 逐行提取代号 + P/E + 殖利率
+  │   └─ 写入: Cells(j, 9~11) — I/J/K 列
+  │
+  ├── ❷ TWSE 指数数据
+  │   ├─ 来源: twse.com.tw/exchangeReport/MI_INDEX (指数)
+  │   ├─ 抓取: ConnectMarketWatch(url, [ba1], 5)
+  │   └─ 写入: [i1],[i2] 指数值
+  │
+  ├── ❸ OTC 柜买数据
+  │   └─ OTCC()
+  │       ├─ 来源: tpex.org.tw (P/E + 指数)
+  │       ├─ 抓取: ConnectXMLHTTP(url)
+  │       └─ 写入: N/O/P 列
+  │
+  ├── fm6() → 格式化 + 清理临时列
+  └── ProtectSheet
+
+---
+
+Macro11() — S&amp;P 500                             [Module6.bas]
+  ├── 抓取: finviz.com/screener (26页, 每页20支)
+  │   └── 循环: QueryTables.Add × 26 次
+  ├── 写入: S/T/U/V/W 列
+  └── fm6()
+
+Macro12() — 日经 225                            [Module6.bas]
+  ├── 抓取: investing.com (IE 自动化, 需 JS 渲染)
+  │   └── InternetExplorer.Application → navigate → 等待
+  ├── 写入: Z/AA 列
+  └── fm6()
+
+Macro13() — 恒生指数                            [Module6.bas]
+  ├── 抓取: investing.com (IE 自动化)
+  ├── 写入: AD/AE 列
+  └── fm6()
+
+Macro14() — 沪深 180                            [Module6.bas]
+  ├── 抓取: aastocks.com (9页)
+  │   └── 循环: QueryTables.Add × 9 次
+  ├── 写入: AH/AI/AJ 列
+  └── fm6()</code></pre>
+</section>
+<section id="sec-perf" class="level1" data-number="6">
+<h1 data-number="6"><span class="header-section-number">6</span> Phase 4: 绩效计算（Macro30）</h1>
+<pre><code>手动触发 Macro30()                              [Module8.bas]
+  │
+  ├── UnprotectSheet
+  │
+  ├── 遍历每个投资组合 (f):
+  │   │
+  │   └── pf(f)                                 → 单组合绩效
+  │       │
+  │       ├── ddlet(f)                          → 删除标记 "X" 的持仓
+  │       │   └── 扫描 Cells(i, f+5), 若="X" → 删除整行
+  │       │
+  │       ├── 遍历每支持仓:
+  │       │   │
+  │       │   ├── 读取: 代号/买入日/买入价/卖出日/卖出价/币种
+  │       │   │
+  │       │   ├── 汇率抓取（若非 TWD）:
+  │       │   │   ├── ConnectMarketWatch(yahoo_fx_url)
+  │       │   │   └── ConnectWinHttp(wise_url)    → wise.com 汇率
+  │       │   │
+  │       │   ├── 计算:
+  │       │   │   ├── 持仓市值 = 股数 × 现价 × 汇率
+  │       │   │   ├── 投入成本
+  │       │   │   └── 损益 = 市值 - 成本
+  │       │   │
+  │       │   └── 写入: Cells(k, drr~drr+8)
+  │       │
+  │       ├── XIRR 计算:
+  │       │   ├── 构建现金流数组（买入=负, 卖出=正, 当前=正）
+  │       │   └── Excel XIRR 公式 → 年化收益率
+  │       │
+  │       ├── cpbf(f)                           → 巴菲特距离
+  │       │   ├── 公式: Distance = 100 × (A^0.5 × B) / 3701
+  │       │   │   A = 投资年数, B = 总回报倍数
+  │       │   └── 写入: Cells(i+1~i+6, f+1)
+  │       │
+  │       └── fm8(f)                            → 格式化
+  │
+  ├── pfn(f)                                    → 总组合汇总
+  │   ├── 汇总所有组合: 总投入/总市值/总损益
+  │   ├── cpbf(f)                               → 总巴菲特距离
+  │   └── fm8(f)                                → 格式化
+  │
+  └── ProtectSheet</code></pre>
+</section>
+<section id="sec-tax" class="level1" data-number="7">
+<h1 data-number="7"><span class="header-section-number">7</span> Phase 5: 税务计算</h1>
+<pre><code>手动触发 exdiv()                                [Module9.bas]
+  │
+  ├── UnprotectSheet
+  │
+  ├── 遍历持股列表:
+  │   │
+  │   ├── ❶ 抓取除息资料
+  │   │   ├── 来源: moneydj.com.tw/z/zc/zci/zci_{code}.djhtm
+  │   │   ├── 抓取: TSECFSQT(url, Cells, "1")          ← Module1
+  │   │   └── 解析: 除息日期 + 现金股利 + 股票股利
+  │   │
+  │   ├── ❷ 抓取现金股利明细
+  │   │   ├── 来源: moneydj.com.tw/z/zc/zcc/zcc_{code}.djhtm
+  │   │   ├── 抓取: TSECFSQT(url, Cells, "1")
+  │   │   └── 解析: 各年度股利金额
+  │   │
+  │   ├── ❸ 计算税额
+  │   │   ├── 股息收入 = 股数 × 每股股利
+  │   │   ├── IF 股息 &gt; 20,000 TWD:
+  │   │   │   └── 补充保费 = 股息 × 2.11%（二代健保）
+  │   │   ├── IF KY 公司（境外注册）:
+  │   │   │   └── 特殊税率处理
+  │   │   └── 写入: Cells(k, 12~19)
+  │   │
+  │   └── QueryTablesDelete / Delete_Pictures
+  │
+  ├── taxtb()                                   → 税率表生成
+  │   ├── 遍历收入区间
+  │   ├── 填入税率公式
+  │   └── 格式化输出表
+  │
+  └── ProtectSheet</code></pre>
+</section>
+<section id="sec-pipeline" class="level1" data-number="8">
+<h1 data-number="8"><span class="header-section-number">8</span> 完整数据流管线</h1>
+<p>将所有路径抽象为统一的 5 阶段管线：</p>
+<div class="cell" data-fig-width="100%" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-pipeline" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-pipeline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-pipeline">flowchart LR
+    subgraph S1["① 数据来源"]
+        direction TB
+        MDJ["MoneyDJ&lt;br/&gt;(台股财报)"]
+        TWSE["TWSE/TPEX&lt;br/&gt;(台股价格/指数)"]
+        MW["MarketWatch&lt;br/&gt;(美股/全球财报)"]
+        WSJ_s["WSJ&lt;br/&gt;(全球财报)"]
+        YF["Yahoo Finance&lt;br/&gt;(历史价格/汇率)"]
+        AA["AAStocks&lt;br/&gt;(港股/中股)"]
+        SINA["Sina Finance&lt;br/&gt;(中股财报)"]
+        FV["Finviz&lt;br/&gt;(S&amp;P500)"]
+        INV["Investing.com&lt;br/&gt;(日经/恒生)"]
+        WISE["Wise.com&lt;br/&gt;(汇率)"]
+    end
+
+    subgraph S2["② 抓取 + 解析"]
+        direction TB
+        QT["QueryTables.Add&lt;br/&gt;→ .Refresh"]
+        XML["MSXML2.XMLHTTP&lt;br/&gt;→ HTMLDocument"]
+        WH["WinHttp&lt;br/&gt;→ responseText"]
+        IE["IE Automation&lt;br/&gt;→ document"]
+        CSV["CSV Download&lt;br/&gt;→ Split()"]
+        JSON["JSON API&lt;br/&gt;→ ParseJson()"]
+    end
+
+    subgraph S3["③ 数据清洗"]
+        direction TB
+        DOM["DOM 解析&lt;br/&gt;getElementById&lt;br/&gt;getElementsByTagName"]
+        UNIT["unitconversion&lt;br/&gt;K/M/B/T → 数字"]
+        DATE["SEASONTF / YEARTF&lt;br/&gt;日期格式标准化"]
+        SPLIT["splitt&lt;br/&gt;拆股比率解析"]
+        HN["HandleNulls&lt;br/&gt;null → 0"]
+        DEL["Delete rows&lt;br/&gt;无效行/空行清除"]
+    end
+
+    subgraph S4["④ 财务计算"]
+        direction TB
+        HL["highlow&lt;br/&gt;拆股调整高低价"]
+        XIRR["XIRR&lt;br/&gt;年化收益率"]
+        BUFF["cpbf&lt;br/&gt;巴菲特距离"]
+        TAX["taxtb&lt;br/&gt;税率计算"]
+        FX["汇率换算&lt;br/&gt;TWD/USD/HKD/CNY"]
+    end
+
+    subgraph S5["⑤ 写入 Excel"]
+        direction TB
+        CELL["Cells(row, col)&lt;br/&gt;逐格写入"]
+        RNG["Range.Resize&lt;br/&gt;批量数组写入"]
+        FMT["fm6/fm7/fm8&lt;br/&gt;格式化"]
+        LINK["Hyperlinks.Add&lt;br/&gt;超链接"]
+        PROT["ProtectSheet&lt;br/&gt;锁定"]
+    end
+
+    S1 --&gt; S2 --&gt; S3 --&gt; S4 --&gt; S5
+
+    style S1 fill:#e3f2fd,stroke:#1565c0
+    style S2 fill:#e8f5e9,stroke:#388e3c
+    style S3 fill:#fff3e0,stroke:#f57c00
+    style S4 fill:#fce4ec,stroke:#c62828
+    style S5 fill:#f3e5f5,stroke:#7b1fa2
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-pipeline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;3: 统一数据管线：来源 → 解析 → 清洗 → 计算 → 写入
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<section id="各阶段函数归属" class="level2" data-number="8.1">
+<h2 data-number="8.1" class="anchored" data-anchor-id="各阶段函数归属"><span class="header-section-number">8.1</span> 各阶段函数归属</h2>
+<div id="tbl-pipeline-funcs" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-pipeline-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;2: 数据管线函数归属
+</figcaption>
+<div aria-describedby="tbl-pipeline-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>阶段</th>
+<th>函数</th>
+<th>所在模块</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>① 数据来源</strong></td>
+<td>URL 构造逻辑（硬编码在 Macro1~5 内部）</td>
+<td>M1~M5</td>
+</tr>
+<tr class="even">
+<td><strong>② 抓取</strong></td>
+<td><code>TSECFSQT</code>, <code>TSECFSQTF</code></td>
+<td>M1</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td><code>ConnectMarketWatch</code></td>
+<td>M2</td>
+</tr>
+<tr class="even">
+<td></td>
+<td><code>ConnectXMLHTTP</code></td>
+<td>M2</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td><code>ConnectWinHttp</code></td>
+<td>M2</td>
+</tr>
+<tr class="even">
+<td></td>
+<td><code>ConnectIE</code></td>
+<td>M2</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td><code>DCSV</code>, <code>CCRUMBT</code></td>
+<td>M2（已废弃）</td>
+</tr>
+<tr class="even">
+<td></td>
+<td><code>TWReport</code></td>
+<td>M1</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td><code>OTC</code></td>
+<td>M1</td>
+</tr>
+<tr class="even">
+<td><strong>② 解析</strong></td>
+<td><code>ParseJson</code></td>
+<td>外部（位置待确认）</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td>HTML DOM 操作</td>
+<td>内联在 TWReport/OTC 中</td>
+</tr>
+<tr class="even">
+<td><strong>③ 清洗</strong></td>
+<td><code>unitconversion</code></td>
+<td>M2</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td><code>SEASONTF</code>, <code>YEARTF</code></td>
+<td>M1</td>
+</tr>
+<tr class="even">
+<td></td>
+<td><code>splitt</code></td>
+<td>M2</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td><code>HandleNulls</code></td>
+<td>M2</td>
+</tr>
+<tr class="even">
+<td></td>
+<td>行删除逻辑</td>
+<td>内联在各 Macro 中</td>
+</tr>
+<tr class="odd">
+<td><strong>④ 计算</strong></td>
+<td><code>highlow</code></td>
+<td>M2</td>
+</tr>
+<tr class="even">
+<td></td>
+<td>XIRR</td>
+<td>M8 (Excel 公式)</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td><code>cpbf</code></td>
+<td>M8</td>
+</tr>
+<tr class="even">
+<td></td>
+<td><code>taxtb</code></td>
+<td>M9</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td>汇率换算</td>
+<td>内联在 pf() 中</td>
+</tr>
+<tr class="even">
+<td><strong>⑤ 写入</strong></td>
+<td><code>fm6</code>, <code>fm7</code>, <code>fm8</code></td>
+<td>M6, M7, M8</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td><code>addlink</code></td>
+<td>M7</td>
+</tr>
+<tr class="even">
+<td></td>
+<td><code>ProtectSheet</code></td>
+<td>shared_modules</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td><code>ERRLOG</code></td>
+<td>M1</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+</section>
+<section id="sec-assessment" class="level1" data-number="9">
+<h1 data-number="9"><span class="header-section-number">9</span> 函数价值评估</h1>
+<section id="核心函数不可删除" class="level2" data-number="9.1">
+<h2 data-number="9.1" class="anchored" data-anchor-id="核心函数不可删除"><span class="header-section-number">9.1</span> 核心函数（不可删除）</h2>
+<p>系统运行的必要路径上的函数：</p>
+<div id="tbl-core" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-core-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;3: 核心函数清单
+</figcaption>
+<div aria-describedby="tbl-core-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>模块</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Macro1</code> ~ <code>Macro5</code></td>
+<td>M1~M5</td>
+<td>五大市场数据引擎主入口</td>
+</tr>
+<tr class="even">
+<td><code>ConnectMarketWatch</code></td>
+<td>M2</td>
+<td>被 7 个模块调用的主要抓取方法</td>
+</tr>
+<tr class="odd">
+<td><code>ConnectXMLHTTP</code></td>
+<td>M2</td>
+<td>通用 HTTP GET</td>
+</tr>
+<tr class="even">
+<td><code>ConnectWinHttp</code></td>
+<td>M2</td>
+<td>TLS 请求（汇率等）</td>
+</tr>
+<tr class="odd">
+<td><code>TWReport</code></td>
+<td>M1</td>
+<td>台股财报 HTML 解析（无替代）</td>
+</tr>
+<tr class="even">
+<td><code>TSECFSQT</code></td>
+<td>M1</td>
+<td>台股 QueryTables 封装</td>
+</tr>
+<tr class="odd">
+<td><code>Yahoo_Price_Dividend_Split</code></td>
+<td>M2</td>
+<td>当前生效的历史价格方法</td>
+</tr>
+<tr class="even">
+<td><code>HK/CN/WW_Yahoo_Price_Div_Split</code></td>
+<td>M3~M5</td>
+<td>各市场历史价格</td>
+</tr>
+<tr class="odd">
+<td><code>findAll</code></td>
+<td>shared</td>
+<td>股票查找唯一实现</td>
+</tr>
+<tr class="even">
+<td><code>Stocklist</code></td>
+<td>shared</td>
+<td>代号数据库更新唯一实现</td>
+</tr>
+<tr class="odd">
+<td><code>ProtectSheet</code> / <code>UnprotectSheet</code></td>
+<td>shared</td>
+<td>每个 Macro 首尾必调</td>
+</tr>
+<tr class="even">
+<td><code>highlow</code></td>
+<td>M2</td>
+<td>拆股调整（4 个模块依赖）</td>
+</tr>
+<tr class="odd">
+<td><code>unitconversion</code></td>
+<td>M2</td>
+<td>K/M/B/T 转换（关键数据处理）</td>
+</tr>
+<tr class="even">
+<td><code>mkw</code> / <code>yho</code> / <code>wsj</code> / <code>yhondd</code></td>
+<td>M2/M5</td>
+<td>代号格式转换</td>
+</tr>
+<tr class="odd">
+<td><code>pf</code> / <code>pfn</code> / <code>cpbf</code></td>
+<td>M8</td>
+<td>绩效计算核心</td>
+</tr>
+<tr class="even">
+<td><code>exdiv</code> / <code>taxtb</code></td>
+<td>M9</td>
+<td>税务计算核心</td>
+</tr>
+<tr class="odd">
+<td><code>Macro20</code></td>
+<td>M7</td>
+<td>批量更新编排器</td>
+</tr>
+<tr class="even">
+<td><code>lst</code> / <code>w2k</code></td>
+<td>M7</td>
+<td>收藏数据映射</td>
+</tr>
+<tr class="odd">
+<td><code>fm6</code> / <code>fm7</code> / <code>fm8</code></td>
+<td>M6~M8</td>
+<td>格式化（影响可读性）</td>
+</tr>
+<tr class="even">
+<td><code>addlink</code> / <code>Delete_Pictures</code></td>
+<td>M7</td>
+<td>清理+超链接</td>
+</tr>
+<tr class="odd">
+<td><code>QueryTablesDelete</code></td>
+<td>ThisWorkbook_7</td>
+<td>连接清理</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section id="可删除函数" class="level2" data-number="9.2">
+<h2 data-number="9.2" class="anchored" data-anchor-id="可删除函数"><span class="header-section-number">9.2</span> 可删除函数</h2>
+<p>已废弃或冗余的函数：</p>
+<div id="tbl-deletable" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-deletable-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;4: 可删除函数清单
+</figcaption>
+<div aria-describedby="tbl-deletable-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>模块</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>OTC_BAK</code></td>
+<td>M1</td>
+<td>OTC 的备份实现，已被 <code>OTC</code> 取代</td>
+</tr>
+<tr class="even">
+<td><code>hkhis</code></td>
+<td>M3</td>
+<td>旧版 Yahoo 方法，已被 <code>HK_Yahoo_Price_Dividend_Split</code> 取代</td>
+</tr>
+<tr class="odd">
+<td><code>cnhis</code></td>
+<td>M4</td>
+<td>旧版 Yahoo 方法，已被 <code>CN_Yahoo_Price_Dividend_Split</code> 取代</td>
+</tr>
+<tr class="even">
+<td><code>glhis</code></td>
+<td>M5</td>
+<td>旧版 Yahoo 方法，已被 <code>WW_Yahoo_Price_Dividend_Split</code> 取代</td>
+</tr>
+<tr class="odd">
+<td><code>ushis</code></td>
+<td>M2</td>
+<td>旧版 Yahoo V7 方法，已被 V8 JSON 版取代</td>
+</tr>
+<tr class="even">
+<td><code>Yahoo_Price_Dividend_Split_20241111</code></td>
+<td>M2</td>
+<td>带日期的旧版实现</td>
+</tr>
+<tr class="odd">
+<td><code>CCRUMBT</code> + <code>DCSV</code></td>
+<td>M2</td>
+<td>Yahoo crumb 机制已失效（代码注释确认）</td>
+</tr>
+<tr class="even">
+<td><code>CCRUMBT_BAK</code> + <code>DCSV_BAK</code></td>
+<td>M5</td>
+<td>同上备份版</td>
+</tr>
+<tr class="odd">
+<td><code>ConnectIE</code> + <code>DelIE</code></td>
+<td>M2</td>
+<td>IE 已停产，仅 M6 两处使用</td>
+</tr>
+<tr class="even">
+<td><code>TSECFSQTF</code></td>
+<td>M1</td>
+<td>仅被调用 1 次，可内联</td>
+</tr>
+<tr class="odd">
+<td><code>SEASONCU</code> / <code>YEARCU</code></td>
+<td>M1</td>
+<td>已被注释掉，未被调用</td>
+</tr>
+<tr class="even">
+<td><code>Delete_Connection_XL2007</code></td>
+<td>shared</td>
+<td>与 <code>_XL2007_2</code> 重复</td>
+</tr>
+<tr class="odd">
+<td><code>Delete_Connection_XL2003_2</code></td>
+<td>shared</td>
+<td>与 <code>_XL2003</code> 重复</td>
+</tr>
+<tr class="even">
+<td><code>Macro8</code> / <code>Macro9</code></td>
+<td>M1</td>
+<td>仅缩放视图，非核心</td>
+</tr>
+<tr class="odd">
+<td><code>Macro35</code> / <code>Macro36</code> / <code>Macro40</code></td>
+<td>M7/M8</td>
+<td>仅缩放/滚动，非核心</td>
+</tr>
+<tr class="even">
+<td><code>enEvt</code></td>
+<td>shared</td>
+<td>单行函数，可内联</td>
+</tr>
+<tr class="odd">
+<td><strong>JsonConverter.bas 整个文件</strong></td>
+<td>—</td>
+<td>实为 Module8 副本，不含 JSON 代码</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">警告</span>删除风险提示
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><code>ConnectIE</code> / <code>DelIE</code> 虽然 IE 已停产，但 Module6 的 Macro12（日经225）和 Macro13（恒生指数）仍依赖 IE 自动化来渲染 investing.com 的动态页面。删除前需替换为 <code>ConnectXMLHTTP</code> 或 Selenium 等方案。</p>
+</div>
+</div>
+</section>
+</section>
+<section id="sec-refactor" class="level1" data-number="10">
+<h1 data-number="10"><span class="header-section-number">10</span> 重构重点区域</h1>
+<section id="优先级排序" class="level2" data-number="10.1">
+<h2 data-number="10.1" class="anchored" data-anchor-id="优先级排序"><span class="header-section-number">10.1</span> 优先级排序</h2>
+<div class="cell" data-fig-width="100%" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-refactor" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-refactor-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-refactor">gantt
+    title 重构优先级路线图
+    dateFormat X
+    axisFormat %s
+
+    section P0 关键
+    抽离 Module2 公共函数 → shared_modules       :crit, a1, 0, 3
+    删除 JsonConverter.bas 副本                   :crit, a2, 0, 1
+    确认 ParseJson 实际来源                       :crit, a3, 0, 1
+
+    section P1 高优
+    清理 6 个废弃函数 (hkhis/cnhis/glhis/ushis...)  :b1, 1, 3
+    替换 IE 自动化 (Macro12/13)                       :b2, 2, 5
+    统一 Yahoo 历史价格方法 → 1 个通用函数             :b3, 2, 5
+
+    section P2 中优
+    Macro1~5 URL 提取为配置常量                    :c1, 3, 6
+    错误处理: On Error Resume Next → 显式处理      :c2, 4, 7
+    函数重命名: Macro{N} → 语义化名称              :c3, 5, 8
+
+    section P3 低优
+    删除 4 个重复连接清理函数                       :d1, 6, 7
+    删除缩放/滚动 Macro (8/9/35/36/40)             :d2, 7, 8
+    合并 TSECFSQT + TSECFSQTF                      :d3, 7, 8
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-refactor-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;4: 重构优先级路线图
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="重构详细说明" class="level2" data-number="10.2">
+<h2 data-number="10.2" class="anchored" data-anchor-id="重构详细说明"><span class="header-section-number">10.2</span> 重构详细说明</h2>
+<section id="p0-抽离-module2-公共函数最高优先级" class="level3" data-number="10.2.1">
+<h3 data-number="10.2.1" class="anchored" data-anchor-id="p0-抽离-module2-公共函数最高优先级"><span class="header-section-number">10.2.1</span> P0: 抽离 Module2 公共函数（最高优先级）</h3>
+<p><strong>问题：</strong> 14 个跨模块公共函数定义在 Module2（美股业务模块）中，违反职责分离原则。</p>
+<p><strong>方案：</strong></p>
+<pre><code>当前状态:
+  Module2.bas = 美股业务逻辑 + 公共连接函数 + 公共工具函数
+
+重构后:
+  network_utils.bas (新建)
+    ├── ConnectXMLHTTP()
+    ├── ConnectMarketWatch()
+    ├── ConnectWinHttp()
+    └── ConnectIE() → 后续替换
+
+  data_utils.bas (新建)
+    ├── highlow()
+    ├── unitconversion()
+    ├── splitt()
+    ├── HandleNulls()
+    ├── mkw() / yho() / wsj() / yhondd()
+    └── Delete_Pictures()
+
+  Module2.bas (瘦身)
+    ├── Macro2()
+    ├── Yahoo_Price_Dividend_Split()
+    └── 美股专用逻辑</code></pre>
+</section>
+<section id="p1-统一-yahoo-历史价格" class="level3" data-number="10.2.2">
+<h3 data-number="10.2.2" class="anchored" data-anchor-id="p1-统一-yahoo-历史价格"><span class="header-section-number">10.2.2</span> P1: 统一 Yahoo 历史价格</h3>
+<p><strong>问题：</strong> 4 个几乎相同的函数分布在 4 个模块中。</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 30%">
+<col style="width: 30%">
+<col style="width: 40%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>模块</th>
+<th>差异点</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Yahoo_Price_Dividend_Split(cd$, dc)</code></td>
+<td>M2</td>
+<td>V8 JSON API</td>
+</tr>
+<tr class="even">
+<td><code>HK_Yahoo_Price_Dividend_Split(cd$, dc)</code></td>
+<td>M3</td>
+<td>CSV + <code>.HK</code> 后缀</td>
+</tr>
+<tr class="odd">
+<td><code>CN_Yahoo_Price_Dividend_Split(cd$, ex$, dc)</code></td>
+<td>M4</td>
+<td>CSV + <code>.SS</code>/<code>.SZ</code> 后缀</td>
+</tr>
+<tr class="even">
+<td><code>WW_Yahoo_Price_Dividend_Split(cd$, nd$, dc)</code></td>
+<td>M5</td>
+<td>CSV + 动态后缀</td>
+</tr>
+</tbody>
+</table>
+<p><strong>方案：</strong> 合并为 1 个通用函数：</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode vb code-with-copy"><code class="sourceCode monobasic"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">Sub </span>Yahoo_Price_Dividend_Split(cd$, suffix$, dc <span class="kw">As</span> <span class="dt">Long</span>, useJSON <span class="kw">As</span> <span class="dt">Boolean</span>)</span></code></pre></div><button title="复制到剪贴板" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="p2-url-配置外部化" class="level3" data-number="10.2.3">
+<h3 data-number="10.2.3" class="anchored" data-anchor-id="p2-url-配置外部化"><span class="header-section-number">10.2.3</span> P2: URL 配置外部化</h3>
+<p><strong>问题：</strong> 所有 URL 硬编码在 Macro 函数体内，任何网站改版都需要修改代码。</p>
+<p><strong>方案：</strong> 将 URL 模板提取到配置 Sheet 或常量模块：</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode vb code-with-copy"><code class="sourceCode monobasic"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co">' config_urls.bas</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="kw">Public</span> <span class="kw">Const</span> URL_MDJ_BASE = <span class="st">"http://pscnetinvest.moneydj.com.tw/z/zc/"</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="kw">Public</span> <span class="kw">Const</span> URL_MW_STOCK = <span class="st">"https://www.marketwatch.com/investing/Stock/"</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="kw">Public</span> <span class="kw">Const</span> URL_YAHOO_V8 = <span class="st">"https://query1.finance.yahoo.com/v8/finance/chart/"</span></span></code></pre></div><button title="复制到剪贴板" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+</section>
+</section>
+<section id="sec-appendix" class="level1" data-number="11">
+<h1 data-number="11"><span class="header-section-number">11</span> 附录: 完整函数索引</h1>
+<section id="按数据管线阶段分类" class="level2" data-number="11.1">
+<h2 data-number="11.1" class="anchored" data-anchor-id="按数据管线阶段分类"><span class="header-section-number">11.1</span> 按数据管线阶段分类</h2>
+<div class="tabset-margin-container"></div><div class="panel-tabset">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-1-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-1" role="tab" aria-controls="tabset-1-1" aria-selected="true" href="">① 数据来源（URL构造）</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-1-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-2" role="tab" aria-controls="tabset-1-2" aria-selected="false" href="">② 网络抓取</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-1-3-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-3" role="tab" aria-controls="tabset-1-3" aria-selected="false" href="">③ 数据清洗</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-1-4-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-4" role="tab" aria-controls="tabset-1-4" aria-selected="false" href="">④ 财务计算</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-1-5-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-5" role="tab" aria-controls="tabset-1-5" aria-selected="false" href="">⑤ Excel 写入</a></li></ul>
+<div class="tab-content">
+<div id="tabset-1-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-1-1-tab">
+<p>URL 构造逻辑内联在以下函数中（无独立函数）：</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 29%">
+<col style="width: 37%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>主函数</th>
+<th style="text-align: center;">数据源数量</th>
+<th>主要域名</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Macro1</td>
+<td style="text-align: center;">13</td>
+<td>moneydj.com.tw, twse.com.tw, tpex.org.tw</td>
+</tr>
+<tr class="even">
+<td>Macro2</td>
+<td style="text-align: center;">18+</td>
+<td>marketwatch.com, wsj.com, yahoo.com, seekingalpha.com</td>
+</tr>
+<tr class="odd">
+<td>Macro3</td>
+<td style="text-align: center;">8</td>
+<td>aastocks.com, yahoo.com, wise.com</td>
+</tr>
+<tr class="even">
+<td>Macro4</td>
+<td style="text-align: center;">8</td>
+<td>sina.com.cn, aastocks.com, yahoo.com</td>
+</tr>
+<tr class="odd">
+<td>Macro5</td>
+<td style="text-align: center;">11</td>
+<td>wsj.com, yahoo.com, wise.com, aastocks.com</td>
+</tr>
+<tr class="even">
+<td>Macro10~14</td>
+<td style="text-align: center;">各2~3</td>
+<td>twse.com.tw, finviz.com, investing.com, aastocks.com</td>
+</tr>
+<tr class="odd">
+<td>exdiv</td>
+<td style="text-align: center;">2</td>
+<td>moneydj.com.tw</td>
+</tr>
+<tr class="even">
+<td>pf</td>
+<td style="text-align: center;">2</td>
+<td>yahoo.com, wise.com</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="tabset-1-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-2-tab">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>方法</th>
+<th>定义</th>
+<th>调用者</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>TSECFSQT</code></td>
+<td>QueryTables</td>
+<td>M1</td>
+<td>M1, M9</td>
+</tr>
+<tr class="even">
+<td><code>TSECFSQTF</code></td>
+<td>QueryTables+POST</td>
+<td>M1</td>
+<td>M1</td>
+</tr>
+<tr class="odd">
+<td><code>ConnectMarketWatch</code></td>
+<td>QueryTables</td>
+<td>M2</td>
+<td>M2~M8</td>
+</tr>
+<tr class="even">
+<td><code>ConnectXMLHTTP</code></td>
+<td>MSXML2</td>
+<td>M2</td>
+<td>M2, M5, M6</td>
+</tr>
+<tr class="odd">
+<td><code>ConnectWinHttp</code></td>
+<td>WinHttp</td>
+<td>M2</td>
+<td>M2, M3, M5, M8</td>
+</tr>
+<tr class="even">
+<td><code>ConnectIE</code></td>
+<td>IE</td>
+<td>M2</td>
+<td>M6</td>
+</tr>
+<tr class="odd">
+<td><code>TWReport</code></td>
+<td>MSXML2+DOM</td>
+<td>M1</td>
+<td>M1</td>
+</tr>
+<tr class="even">
+<td><code>OTC</code></td>
+<td>MSXML2+POST</td>
+<td>M1</td>
+<td>M1</td>
+</tr>
+<tr class="odd">
+<td><code>Stocklist</code></td>
+<td>QueryTables</td>
+<td>shared</td>
+<td>Sheet1</td>
+</tr>
+<tr class="even">
+<td><code>Yahoo_Price_*</code> ×4</td>
+<td>MSXML2/WinHttp</td>
+<td>M2~M5</td>
+<td>M2~M5</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="tabset-1-3" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-3-tab">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>作用</th>
+<th>定义</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>unitconversion</code></td>
+<td>K/M/B/T → 数字</td>
+<td>M2</td>
+</tr>
+<tr class="even">
+<td><code>SEASONTF</code></td>
+<td>季度日期标准化</td>
+<td>M1</td>
+</tr>
+<tr class="odd">
+<td><code>YEARTF</code></td>
+<td>年度日期标准化</td>
+<td>M1</td>
+</tr>
+<tr class="even">
+<td><code>splitt</code></td>
+<td>拆股比率文本 → 数字</td>
+<td>M2</td>
+</tr>
+<tr class="odd">
+<td><code>HandleNulls</code></td>
+<td>JSON null → 0</td>
+<td>M2</td>
+</tr>
+<tr class="even">
+<td><code>mkw</code>/<code>yho</code>/<code>wsj</code>/<code>yhondd</code></td>
+<td>代号格式转换</td>
+<td>M2/M5</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="tabset-1-4" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-4-tab">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>作用</th>
+<th>定义</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>highlow</code></td>
+<td>拆股调整历史高低价</td>
+<td>M2</td>
+</tr>
+<tr class="even">
+<td><code>cpbf</code></td>
+<td>巴菲特距离</td>
+<td>M8</td>
+</tr>
+<tr class="odd">
+<td><code>pfn</code></td>
+<td>组合汇总</td>
+<td>M8</td>
+</tr>
+<tr class="even">
+<td><code>taxtb</code></td>
+<td>税率表计算</td>
+<td>M9</td>
+</tr>
+<tr class="odd">
+<td>XIRR</td>
+<td>年化收益率</td>
+<td>M8 (Excel 内建)</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="tabset-1-5" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-5-tab">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>作用</th>
+<th>定义</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>fm6</code></td>
+<td>选股表格式化</td>
+<td>M6</td>
+</tr>
+<tr class="even">
+<td><code>fm7</code></td>
+<td>收藏表格式化</td>
+<td>M7</td>
+</tr>
+<tr class="odd">
+<td><code>fm8</code></td>
+<td>绩效表格式化</td>
+<td>M8</td>
+</tr>
+<tr class="even">
+<td><code>addlink</code></td>
+<td>超链接批量添加</td>
+<td>M7</td>
+</tr>
+<tr class="odd">
+<td><code>ERRLOG</code></td>
+<td>错误日志写入 V47</td>
+<td>M1</td>
+</tr>
+<tr class="even">
+<td><code>ProtectSheet</code></td>
+<td>锁定工作表</td>
+<td>shared</td>
+</tr>
+<tr class="odd">
+<td><code>Delete_Pictures</code></td>
+<td>清除内嵌图片</td>
+<td>M7</td>
+</tr>
+<tr class="even">
+<td><code>QueryTablesDelete</code></td>
+<td>清除查询连接</td>
+<td>ThisWorkbook_7</td>
+</tr>
+<tr class="odd">
+<td><code>lst</code> / <code>w2k</code> / <code>ak2k</code></td>
+<td>收藏数据映射</td>
+<td>M7</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "已复制");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "已复制");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

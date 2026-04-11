@@ -1,0 +1,781 @@
+---
+title: "系统执行流程与数据流分析"
+subtitle: "盈再表 VBA 系统 — 从启动到写入的完整路径"
+author: "Trading Project Team"
+date: today
+date-format: "YYYY-MM-DD"
+lang: zh
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "目录"
+    number-sections: true
+    code-fold: true
+    theme: cosmo
+    fontsize: "1rem"
+    mainfont: "PingFang SC, Microsoft YaHei, sans-serif"
+execute:
+  echo: false
+---
+
+# 系统完整生命周期 {#sec-lifecycle}
+
+```{mermaid}
+%%| label: fig-lifecycle
+%%| fig-cap: "系统从启动到退出的完整生命周期"
+%%| fig-width: 100%
+stateDiagram-v2
+    [*] --> Boot: 打开 .xlsm
+
+    state Boot {
+        WO: Workbook_Open()
+        AO: Auto_open()
+        WO --> AO
+    }
+
+    Boot --> Idle: 初始化完成
+
+    state Idle {
+        [*] --> WaitInput: 等待用户操作
+    }
+
+    Idle --> SingleQuery: 编辑 A2 单元格
+    Idle --> BatchUpdate: 手动 Macro20
+    Idle --> IndexScreen: 手动 Macro10~14
+    Idle --> Performance: 手动 Macro30
+    Idle --> Tax: 手动 tax/exdiv
+    Idle --> SaveToFav: 手动 Macro15~19
+
+    state SingleQuery {
+        SC: Worksheet_Change
+        FA: findAll()
+        MN: Macro1~5
+        SC --> FA
+        FA --> MN
+    }
+
+    state BatchUpdate {
+        Loop: 遍历收藏列表
+        CallMN: 依次调用 Macro1~5
+        Merge: 合并结果到收藏
+        Loop --> CallMN
+        CallMN --> Merge
+    }
+
+    SingleQuery --> Idle: Beep 完成
+    BatchUpdate --> Idle
+    IndexScreen --> Idle
+    Performance --> Idle
+    Tax --> Idle
+    SaveToFav --> Idle
+
+    Idle --> Save: 用户保存
+    Save --> Idle: BeforeSave 清理 QueryTables
+
+    Idle --> [*]: 关闭工作簿
+```
+
+# Phase 0: 系统启动 {#sec-boot}
+
+```         
+系统启动（打开 盈再表250723.xlsm）
+  │
+  ├─① Workbook_Open()                          [ThisWorkbook_7.cls]
+  │   ├── 禁用 BackgroundChecking
+  │   ├── 隐藏 External Data 工具栏
+  │   ├── 禁用 AutoRecover
+  │   ├── 禁用 AskToUpdateLinks
+  │   ├── Delete_Connection_XL2003()            → 清除所有旧版数据连接
+  │   ├── QueryTablesDelete("all")              → 清除所有 QueryTable
+  │   ├── 配置 MaxChange / RemoteRef / Precision
+  │   └── 禁用全部 AutoCorrect（6项）
+  │
+  └─② Auto_open()                              [shared_modules.bas]
+      ├── Sheets("台股").[ZZ1] = """"           → 初始化标记
+      └── Sheets("美股").[ZZ1] = """"           → 初始化标记
+```
+
+::: callout-note
+## 启动目的
+
+关闭所有可能干扰自动化抓取的 Excel 特性（链接更新弹窗、自动恢复、错误检查）， 清除上次残留的网络查询连接，确保干净状态。
+:::
+
+# Phase 1: 单股查询 — 主数据流 {#sec-single}
+
+这是系统最核心、最常用的路径。以**台股**为完整示例（美/港/中/全球结构相同）。
+
+## 1.1 触发与查找
+
+```         
+用户在台股 Sheet A2 输入股票代号（如 "2330"）
+  │
+  ▼
+Sheet1.Worksheet_Change(Target)                 [Sheet1.cls]
+  │
+  ├── Guard: 排除整行选中 / 非A列 / Row>2
+  ├── 禁用 Events + ScreenUpdating
+  │
+  ├── findAll("2330")                           [shared_modules.bas]
+  │   ├── 在 Worksheets("工作表1").Columns(1) 中 .Find()
+  │   ├── 解析: "2330 台積電" → theCode="2330", theName="台積電"
+  │   └── 写入全局变量 theIndustry
+  │
+  ├── 若未找到:
+  │   ├── Stocklist()                           [shared_modules.bas]
+  │   │   ├── QueryTables → twse.com.tw/isin (strMode=2)  上市股代号
+  │   │   ├── 清洗: 删除 ETF/TDR/注释行
+  │   │   ├── QueryTables → twse.com.tw/isin (strMode=4)  上柜股代号
+  │   │   ├── 清洗: 删除非股票行
+  │   │   └── 合并+去重 → 写入 Worksheets("工作表1")
+  │   └── findAll("2330") 重试
+  │
+  ├── 写入: [A2]=代号, [A1]=名称+代号+产业, [A20]=名称
+  │
+  ▼
+  Call Macro1()
+```
+
+## 1.2 数据抓取（Macro1 — 台股完整流程）
+
+```         
+Macro1()                                        [Module1.bas]
+  │
+  ├── UnprotectSheet(ActiveSheet)               [shared_modules]
+  ├── 初始化列偏移量:
+  │   dc1=75  dc2=32  dc6=87  dc7=98  dc8=103  dc10=120  dc11=130
+  ├── 清除旧数据: Range("af:eq").Clear
+  ├── RSURLTYPE()  → 随机选择 MoneyDJ 镜像域名
+  │
+  │  ┌─────────────────────────────────────────────────────────────┐
+  │  │            11 种数据抓取（按顺序执行）                        │
+  │  ├─────────────────────────────────────────────────────────────┤
+  │  │                                                             │
+  │  │  ❶ 基本资料 (dc1)                                          │
+  │  │    ├─ 来源: moneydj.com.tw/z/zc/zca/zca_{code}.djhtm      │
+  │  │    ├─ 抓取: TSECFSQT(url, Cells(2,dc), "1")               │
+  │  │    │   └─ QueryTables.Add → .Refresh → .ResultRange        │
+  │  │    ├─ 写入: Cells(2, dc1) 起始区域                          │
+  │  │    └─ 错误: ERRLOG → 追加到 V47                             │
+  │  │                                                             │
+  │  │  ❷ 除息日资料 (dc1)                                        │
+  │  │    ├─ 来源: moneydj.com.tw/z/zc/zci/zci_{code}.djhtm      │
+  │  │    ├─ 抓取: TSECFSQT(url, Cells, "1")                     │
+  │  │    └─ 写入: 同区域偏移                                      │
+  │  │                                                             │
+  │  │  ❸❹ 季度损益表（单体 + 合并）                                │
+  │  │    ├─ 来源: moneydj.com.tw/z/zc/zcq/zcq_{code}.djhtm     │
+  │  │    ├─ 抓取: TWReport(url, dc)                              │
+  │  │    │   ├─ MSXML2.XMLHTTP.Open("GET", url)                  │
+  │  │    │   ├─ HTMLDocument.body.innerHTML = response            │
+  │  │    │   ├─ getElementById("oScrollHead") → 解析表头          │
+  │  │    │   └─ getElementsByTagName("table") → 逐行解析写入      │
+  │  │    ├─ 清洗: SEASONTF(dc) → 季度日期格式标准化               │
+  │  │    └─ 写入: dc1 偏移列区域                                   │
+  │  │                                                             │
+  │  │  ❺❻ 季度资产负债表（单体 + 合并）                            │
+  │  │    ├─ 来源: moneydj.com.tw/z/zc/zcp/zcpa/...              │
+  │  │    ├─ 抓取: TWReport(url, dc)                              │
+  │  │    └─ 清洗: SEASONTF(dc)                                   │
+  │  │                                                             │
+  │  │  ❼❽ 年度损益表（单体 + 合并）                                │
+  │  │    ├─ 来源: moneydj.com.tw/z/zc/zcq/zcqa/...              │
+  │  │    ├─ 抓取: TWReport(url, dc)                              │
+  │  │    └─ 清洗: YEARTF(dc) → 年度日期格式标准化                  │
+  │  │                                                             │
+  │  │  ❾❿ 年度资产负债表（单体 + 合并）                            │
+  │  │    ├─ 来源: moneydj.com.tw/z/zc/zcp/zcpb/...              │
+  │  │    ├─ 抓取: TWReport(url, dc)                              │
+  │  │    └─ 清洗: YEARTF(dc)                                     │
+  │  │                                                             │
+  │  │  ⓫ 获利 / 代号 / 股东 / 转让 / 营收（dc2~dc8）              │
+  │  │    ├─ 来源: moneydj.com.tw (5个不同 endpoint)              │
+  │  │    ├─ 抓取: TSECFSQT × 5 次                                │
+  │  │    └─ 写入: dc2=32, dc6=87, dc7=98, dc8=103 各列区域       │
+  │  │                                                             │
+  │  │  ⓬ 历史股价 (dc10=120)                                     │
+  │  │    ├─ 来源A: twse.com.tw (上市)                             │
+  │  │    ├─ 来源B: twse.com.tw (上柜/FMNPTK)                     │
+  │  │    ├─ 抓取: TSECFSQT × 2 次                                │
+  │  │    └─ 写入: dc10=120 列区域                                  │
+  │  │                                                             │
+  │  │  ⓭ OTC 月统计 (dc11=130)                                   │
+  │  │    ├─ 来源: tpex.org.tw (POST 请求)                        │
+  │  │    ├─ 抓取: OTC(cd$, dc)                                   │
+  │  │    │   ├─ MSXML2.XMLHTTP → POST 表单数据                   │
+  │  │    │   ├─ HTMLDocument → getElementsByTagName("table")     │
+  │  │    │   └─ 逐行逐列解析 → 写入 Cells                        │
+  │  │    └─ 写入: dc11=130 列区域                                  │
+  │  │                                                             │
+  │  └─────────────────────────────────────────────────────────────┘
+  │
+  ├── 创建超链接: Yahoo / MoneyDJ / GDP / Blog
+  ├── QueryTablesDelete(ActiveSheet.Name)       → 清除本轮查询连接
+  ├── Delete_Pictures                           → 删除内嵌图片
+  │
+  ▼
+返回 Sheet1.Worksheet_Change
+  ├── EnableEvents = True
+  ├── ScreenUpdating = True
+  ├── ProtectSheet(ActiveSheet)                 → 锁定工作表
+  └── Beep                                     → 提示完成
+```
+
+## 1.3 各市场差异对照
+
+| 阶段 | 台股 Module1 | 美股 Module2 | 港股 Module3 | 中股 Module4 | 全球 Module5 |
+|------------|------------|------------|------------|------------|------------|
+| **触发** | Sheet1.Change | Sheet2.Change | Sheet3.Change | Sheet4.Change | Sheet5.Change |
+| **查找** | findAll+Stocklist | 无（直接代号） | 无 | 无 | 无 |
+| **代号转换** | 无 | mkw/wsj/yho | Format(0000) | 直接 | yhondd 映射 |
+| **财报来源** | MoneyDJ | MarketWatch/WSJ | AAStocks | Sina Finance | WSJ |
+| **财报抓取** | TSECFSQT+TWReport | ConnectMarketWatch | ConnectMarketWatch | QueryTables.Add | ConnectMarketWatch |
+| **财报解析** | HTML DOM | HTML DOM+unitconv | 直接表格 | 直接表格 | HTML DOM+unitconv |
+| **历史价格** | TSECFSQT(TWSE) | Yahoo V8 JSON | Yahoo CSV | Yahoo CSV | Yahoo CSV |
+| **价格解析** | 直接 | ParseJson+HandleNulls | XMLHTTP+Split | XMLHTTP+Split | XMLHTTP+Split |
+| **高低价调整** | 无 | highlow+splitt | highlow+splitt | highlow+splitt | highlow+splitt |
+| **汇率** | 无（TWD） | Wise.com | Wise.com | 无 | Wise.com |
+| **公司概况** | TSECFSQT | ConnectMarketWatch | ConnectMarketWatch | ConnectMarketWatch | ConnectMarketWatch |
+| **数据类型数** | 11\~13 | 10+ | 8 | 8 | 10+ |
+
+: 各市场数据流差异对照 {#tbl-market-diff}
+
+# Phase 2: 批量更新（Macro20） {#sec-batch}
+
+```         
+手动触发 Macro20()                              [Module7.bas]
+  │
+  ├── UnprotectSheet(ActiveSheet)
+  │
+  ├── 遍历收藏 Sheet 每一行（i = 2 to 最后行）:
+  │   │
+  │   ├── 读取: Cells(i, 22~39) → 股票代号 + 市场类型
+  │   │
+  │   ├── 判断市场:
+  │   │   ├── 台股 → Sheets("台股").Activate → [A2]=代号 → 触发 Macro1
+  │   │   ├── 美股 → Sheets("美股").Activate → [A2]=代号 → 触发 Macro2
+  │   │   ├── 港股 → Sheets("港股").Activate → [A2]=代号 → 触发 Macro3
+  │   │   ├── 中股 → Sheets("中股").Activate → [A2]=代号 → 触发 Macro4
+  │   │   └── 全球 → Sheets("全球").Activate → [A2]=代号 → 触发 Macro5
+  │   │
+  │   ├── Application.Wait（等待抓取完成）
+  │   ├── 切换回收藏 Sheet
+  │   │
+  │   ├── w2k(i)                                → 从市场 Sheet 提取关键指标
+  │   │   ├── 读取: 市场Sheet Cells(行, 列)
+  │   │   └── 写入: 收藏Sheet Cells(i, 22~39)
+  │   │
+  │   └── addlink()                             → 添加超链接
+  │
+  ├── fm7()                                     → 格式化收藏表
+  ├── ProtectSheet(ActiveSheet)
+  └── Beep
+```
+
+```{mermaid}
+%%| label: fig-batch-flow
+%%| fig-cap: "批量更新数据流"
+flowchart TD
+    Start["Macro20 启动"] --> Loop{"遍历收藏列表"}
+
+    Loop -->|"行 i"| Read["读取 Cells(i) 代号+市场"]
+    Read --> Switch{"市场?"}
+
+    Switch -->|台| A1["切换台股Sheet → A2=代号"]
+    Switch -->|美| A2["切换美股Sheet → A2=代号"]
+    Switch -->|港| A3["切换港股Sheet → A2=代号"]
+    Switch -->|中| A4["切换中股Sheet → A2=代号"]
+    Switch -->|全球| A5["切换全球Sheet → A2=代号"]
+
+    A1 --> Trigger["Worksheet_Change 自动触发"]
+    A2 --> Trigger
+    A3 --> Trigger
+    A4 --> Trigger
+    A5 --> Trigger
+
+    Trigger --> Macro["Macro1~5 执行抓取"]
+    Macro --> Wait["Application.Wait"]
+    Wait --> Extract["w2k(i) 提取关键指标"]
+    Extract --> WriteBack["写回收藏Sheet"]
+    WriteBack --> Loop
+
+    Loop -->|"全部完成"| Format["fm7() 格式化"]
+    Format --> Done["Beep 完成"]
+
+    style Trigger fill:#fff3e0,stroke:#f57c00
+    style Macro fill:#e8f5e9,stroke:#388e3c
+```
+
+# Phase 3: 指数选股（Macro10\~14） {#sec-index}
+
+```         
+手动触发 Macro10()                              [Module6.bas] — 台股加权
+  │
+  ├── UnprotectSheet
+  ├── 清除: Columns("i:r, ba:cz, ha:hg").Clear
+  │
+  ├── ❶ TWSE 上市 P/E 数据
+  │   ├─ 来源: twse.com.tw/exchangeReport/BWIBBU_d (全部上市)
+  │   ├─ 抓取: ConnectMarketWatch(url, [ba1], 5)
+  │   ├─ 解析: 逐行提取代号 + P/E + 殖利率
+  │   └─ 写入: Cells(j, 9~11) — I/J/K 列
+  │
+  ├── ❷ TWSE 指数数据
+  │   ├─ 来源: twse.com.tw/exchangeReport/MI_INDEX (指数)
+  │   ├─ 抓取: ConnectMarketWatch(url, [ba1], 5)
+  │   └─ 写入: [i1],[i2] 指数值
+  │
+  ├── ❸ OTC 柜买数据
+  │   └─ OTCC()
+  │       ├─ 来源: tpex.org.tw (P/E + 指数)
+  │       ├─ 抓取: ConnectXMLHTTP(url)
+  │       └─ 写入: N/O/P 列
+  │
+  ├── fm6() → 格式化 + 清理临时列
+  └── ProtectSheet
+
+---
+
+Macro11() — S&P 500                             [Module6.bas]
+  ├── 抓取: finviz.com/screener (26页, 每页20支)
+  │   └── 循环: QueryTables.Add × 26 次
+  ├── 写入: S/T/U/V/W 列
+  └── fm6()
+
+Macro12() — 日经 225                            [Module6.bas]
+  ├── 抓取: investing.com (IE 自动化, 需 JS 渲染)
+  │   └── InternetExplorer.Application → navigate → 等待
+  ├── 写入: Z/AA 列
+  └── fm6()
+
+Macro13() — 恒生指数                            [Module6.bas]
+  ├── 抓取: investing.com (IE 自动化)
+  ├── 写入: AD/AE 列
+  └── fm6()
+
+Macro14() — 沪深 180                            [Module6.bas]
+  ├── 抓取: aastocks.com (9页)
+  │   └── 循环: QueryTables.Add × 9 次
+  ├── 写入: AH/AI/AJ 列
+  └── fm6()
+```
+
+# Phase 4: 绩效计算（Macro30） {#sec-perf}
+
+```         
+手动触发 Macro30()                              [Module8.bas]
+  │
+  ├── UnprotectSheet
+  │
+  ├── 遍历每个投资组合 (f):
+  │   │
+  │   └── pf(f)                                 → 单组合绩效
+  │       │
+  │       ├── ddlet(f)                          → 删除标记 "X" 的持仓
+  │       │   └── 扫描 Cells(i, f+5), 若="X" → 删除整行
+  │       │
+  │       ├── 遍历每支持仓:
+  │       │   │
+  │       │   ├── 读取: 代号/买入日/买入价/卖出日/卖出价/币种
+  │       │   │
+  │       │   ├── 汇率抓取（若非 TWD）:
+  │       │   │   ├── ConnectMarketWatch(yahoo_fx_url)
+  │       │   │   └── ConnectWinHttp(wise_url)    → wise.com 汇率
+  │       │   │
+  │       │   ├── 计算:
+  │       │   │   ├── 持仓市值 = 股数 × 现价 × 汇率
+  │       │   │   ├── 投入成本
+  │       │   │   └── 损益 = 市值 - 成本
+  │       │   │
+  │       │   └── 写入: Cells(k, drr~drr+8)
+  │       │
+  │       ├── XIRR 计算:
+  │       │   ├── 构建现金流数组（买入=负, 卖出=正, 当前=正）
+  │       │   └── Excel XIRR 公式 → 年化收益率
+  │       │
+  │       ├── cpbf(f)                           → 巴菲特距离
+  │       │   ├── 公式: Distance = 100 × (A^0.5 × B) / 3701
+  │       │   │   A = 投资年数, B = 总回报倍数
+  │       │   └── 写入: Cells(i+1~i+6, f+1)
+  │       │
+  │       └── fm8(f)                            → 格式化
+  │
+  ├── pfn(f)                                    → 总组合汇总
+  │   ├── 汇总所有组合: 总投入/总市值/总损益
+  │   ├── cpbf(f)                               → 总巴菲特距离
+  │   └── fm8(f)                                → 格式化
+  │
+  └── ProtectSheet
+```
+
+# Phase 5: 税务计算 {#sec-tax}
+
+```         
+手动触发 exdiv()                                [Module9.bas]
+  │
+  ├── UnprotectSheet
+  │
+  ├── 遍历持股列表:
+  │   │
+  │   ├── ❶ 抓取除息资料
+  │   │   ├── 来源: moneydj.com.tw/z/zc/zci/zci_{code}.djhtm
+  │   │   ├── 抓取: TSECFSQT(url, Cells, "1")          ← Module1
+  │   │   └── 解析: 除息日期 + 现金股利 + 股票股利
+  │   │
+  │   ├── ❷ 抓取现金股利明细
+  │   │   ├── 来源: moneydj.com.tw/z/zc/zcc/zcc_{code}.djhtm
+  │   │   ├── 抓取: TSECFSQT(url, Cells, "1")
+  │   │   └── 解析: 各年度股利金额
+  │   │
+  │   ├── ❸ 计算税额
+  │   │   ├── 股息收入 = 股数 × 每股股利
+  │   │   ├── IF 股息 > 20,000 TWD:
+  │   │   │   └── 补充保费 = 股息 × 2.11%（二代健保）
+  │   │   ├── IF KY 公司（境外注册）:
+  │   │   │   └── 特殊税率处理
+  │   │   └── 写入: Cells(k, 12~19)
+  │   │
+  │   └── QueryTablesDelete / Delete_Pictures
+  │
+  ├── taxtb()                                   → 税率表生成
+  │   ├── 遍历收入区间
+  │   ├── 填入税率公式
+  │   └── 格式化输出表
+  │
+  └── ProtectSheet
+```
+
+# 完整数据流管线 {#sec-pipeline}
+
+将所有路径抽象为统一的 5 阶段管线：
+
+```{mermaid}
+%%| label: fig-pipeline
+%%| fig-cap: "统一数据管线：来源 → 解析 → 清洗 → 计算 → 写入"
+%%| fig-width: 100%
+flowchart LR
+    subgraph S1["① 数据来源"]
+        direction TB
+        MDJ["MoneyDJ<br/>(台股财报)"]
+        TWSE["TWSE/TPEX<br/>(台股价格/指数)"]
+        MW["MarketWatch<br/>(美股/全球财报)"]
+        WSJ_s["WSJ<br/>(全球财报)"]
+        YF["Yahoo Finance<br/>(历史价格/汇率)"]
+        AA["AAStocks<br/>(港股/中股)"]
+        SINA["Sina Finance<br/>(中股财报)"]
+        FV["Finviz<br/>(S&P500)"]
+        INV["Investing.com<br/>(日经/恒生)"]
+        WISE["Wise.com<br/>(汇率)"]
+    end
+
+    subgraph S2["② 抓取 + 解析"]
+        direction TB
+        QT["QueryTables.Add<br/>→ .Refresh"]
+        XML["MSXML2.XMLHTTP<br/>→ HTMLDocument"]
+        WH["WinHttp<br/>→ responseText"]
+        IE["IE Automation<br/>→ document"]
+        CSV["CSV Download<br/>→ Split()"]
+        JSON["JSON API<br/>→ ParseJson()"]
+    end
+
+    subgraph S3["③ 数据清洗"]
+        direction TB
+        DOM["DOM 解析<br/>getElementById<br/>getElementsByTagName"]
+        UNIT["unitconversion<br/>K/M/B/T → 数字"]
+        DATE["SEASONTF / YEARTF<br/>日期格式标准化"]
+        SPLIT["splitt<br/>拆股比率解析"]
+        HN["HandleNulls<br/>null → 0"]
+        DEL["Delete rows<br/>无效行/空行清除"]
+    end
+
+    subgraph S4["④ 财务计算"]
+        direction TB
+        HL["highlow<br/>拆股调整高低价"]
+        XIRR["XIRR<br/>年化收益率"]
+        BUFF["cpbf<br/>巴菲特距离"]
+        TAX["taxtb<br/>税率计算"]
+        FX["汇率换算<br/>TWD/USD/HKD/CNY"]
+    end
+
+    subgraph S5["⑤ 写入 Excel"]
+        direction TB
+        CELL["Cells(row, col)<br/>逐格写入"]
+        RNG["Range.Resize<br/>批量数组写入"]
+        FMT["fm6/fm7/fm8<br/>格式化"]
+        LINK["Hyperlinks.Add<br/>超链接"]
+        PROT["ProtectSheet<br/>锁定"]
+    end
+
+    S1 --> S2 --> S3 --> S4 --> S5
+
+    style S1 fill:#e3f2fd,stroke:#1565c0
+    style S2 fill:#e8f5e9,stroke:#388e3c
+    style S3 fill:#fff3e0,stroke:#f57c00
+    style S4 fill:#fce4ec,stroke:#c62828
+    style S5 fill:#f3e5f5,stroke:#7b1fa2
+```
+
+## 各阶段函数归属
+
+| 阶段 | 函数 | 所在模块 |
+|----|----|----|
+| **① 数据来源** | URL 构造逻辑（硬编码在 Macro1\~5 内部） | M1\~M5 |
+| **② 抓取** | `TSECFSQT`, `TSECFSQTF` | M1 |
+|  | `ConnectMarketWatch` | M2 |
+|  | `ConnectXMLHTTP` | M2 |
+|  | `ConnectWinHttp` | M2 |
+|  | `ConnectIE` | M2 |
+|  | `DCSV`, `CCRUMBT` | M2（已废弃） |
+|  | `TWReport` | M1 |
+|  | `OTC` | M1 |
+| **② 解析** | `ParseJson` | 外部（位置待确认） |
+|  | HTML DOM 操作 | 内联在 TWReport/OTC 中 |
+| **③ 清洗** | `unitconversion` | M2 |
+|  | `SEASONTF`, `YEARTF` | M1 |
+|  | `splitt` | M2 |
+|  | `HandleNulls` | M2 |
+|  | 行删除逻辑 | 内联在各 Macro 中 |
+| **④ 计算** | `highlow` | M2 |
+|  | XIRR | M8 (Excel 公式) |
+|  | `cpbf` | M8 |
+|  | `taxtb` | M9 |
+|  | 汇率换算 | 内联在 pf() 中 |
+| **⑤ 写入** | `fm6`, `fm7`, `fm8` | M6, M7, M8 |
+|  | `addlink` | M7 |
+|  | `ProtectSheet` | shared_modules |
+|  | `ERRLOG` | M1 |
+
+: 数据管线函数归属 {#tbl-pipeline-funcs}
+
+# 函数价值评估 {#sec-assessment}
+
+## 核心函数（不可删除）
+
+系统运行的必要路径上的函数：
+
+| 函数 | 模块 | 理由 |
+|----|----|----|
+| `Macro1` \~ `Macro5` | M1\~M5 | 五大市场数据引擎主入口 |
+| `ConnectMarketWatch` | M2 | 被 7 个模块调用的主要抓取方法 |
+| `ConnectXMLHTTP` | M2 | 通用 HTTP GET |
+| `ConnectWinHttp` | M2 | TLS 请求（汇率等） |
+| `TWReport` | M1 | 台股财报 HTML 解析（无替代） |
+| `TSECFSQT` | M1 | 台股 QueryTables 封装 |
+| `Yahoo_Price_Dividend_Split` | M2 | 当前生效的历史价格方法 |
+| `HK/CN/WW_Yahoo_Price_Div_Split` | M3\~M5 | 各市场历史价格 |
+| `findAll` | shared | 股票查找唯一实现 |
+| `Stocklist` | shared | 代号数据库更新唯一实现 |
+| `ProtectSheet` / `UnprotectSheet` | shared | 每个 Macro 首尾必调 |
+| `highlow` | M2 | 拆股调整（4 个模块依赖） |
+| `unitconversion` | M2 | K/M/B/T 转换（关键数据处理） |
+| `mkw` / `yho` / `wsj` / `yhondd` | M2/M5 | 代号格式转换 |
+| `pf` / `pfn` / `cpbf` | M8 | 绩效计算核心 |
+| `exdiv` / `taxtb` | M9 | 税务计算核心 |
+| `Macro20` | M7 | 批量更新编排器 |
+| `lst` / `w2k` | M7 | 收藏数据映射 |
+| `fm6` / `fm7` / `fm8` | M6\~M8 | 格式化（影响可读性） |
+| `addlink` / `Delete_Pictures` | M7 | 清理+超链接 |
+| `QueryTablesDelete` | ThisWorkbook_7 | 连接清理 |
+
+: 核心函数清单 {#tbl-core}
+
+## 可删除函数
+
+已废弃或冗余的函数：
+
+| 函数 | 模块 | 理由 |
+|------------------------|------------------------|------------------------|
+| `OTC_BAK` | M1 | OTC 的备份实现，已被 `OTC` 取代 |
+| `hkhis` | M3 | 旧版 Yahoo 方法，已被 `HK_Yahoo_Price_Dividend_Split` 取代 |
+| `cnhis` | M4 | 旧版 Yahoo 方法，已被 `CN_Yahoo_Price_Dividend_Split` 取代 |
+| `glhis` | M5 | 旧版 Yahoo 方法，已被 `WW_Yahoo_Price_Dividend_Split` 取代 |
+| `ushis` | M2 | 旧版 Yahoo V7 方法，已被 V8 JSON 版取代 |
+| `Yahoo_Price_Dividend_Split_20241111` | M2 | 带日期的旧版实现 |
+| `CCRUMBT` + `DCSV` | M2 | Yahoo crumb 机制已失效（代码注释确认） |
+| `CCRUMBT_BAK` + `DCSV_BAK` | M5 | 同上备份版 |
+| `ConnectIE` + `DelIE` | M2 | IE 已停产，仅 M6 两处使用 |
+| `TSECFSQTF` | M1 | 仅被调用 1 次，可内联 |
+| `SEASONCU` / `YEARCU` | M1 | 已被注释掉，未被调用 |
+| `Delete_Connection_XL2007` | shared | 与 `_XL2007_2` 重复 |
+| `Delete_Connection_XL2003_2` | shared | 与 `_XL2003` 重复 |
+| `Macro8` / `Macro9` | M1 | 仅缩放视图，非核心 |
+| `Macro35` / `Macro36` / `Macro40` | M7/M8 | 仅缩放/滚动，非核心 |
+| `enEvt` | shared | 单行函数，可内联 |
+| **JsonConverter.bas 整个文件** | — | 实为 Module8 副本，不含 JSON 代码 |
+
+: 可删除函数清单 {#tbl-deletable}
+
+::: callout-warning
+## 删除风险提示
+
+`ConnectIE` / `DelIE` 虽然 IE 已停产，但 Module6 的 Macro12（日经225）和 Macro13（恒生指数）仍依赖 IE 自动化来渲染 investing.com 的动态页面。删除前需替换为 `ConnectXMLHTTP` 或 Selenium 等方案。
+:::
+
+# 重构重点区域 {#sec-refactor}
+
+## 优先级排序
+
+```{mermaid}
+%%| label: fig-refactor
+%%| fig-cap: "重构优先级路线图"
+%%| fig-width: 100%
+gantt
+    title 重构优先级路线图
+    dateFormat X
+    axisFormat %s
+
+    section P0 关键
+    抽离 Module2 公共函数 → shared_modules       :crit, a1, 0, 3
+    删除 JsonConverter.bas 副本                   :crit, a2, 0, 1
+    确认 ParseJson 实际来源                       :crit, a3, 0, 1
+
+    section P1 高优
+    清理 6 个废弃函数 (hkhis/cnhis/glhis/ushis...)  :b1, 1, 3
+    替换 IE 自动化 (Macro12/13)                       :b2, 2, 5
+    统一 Yahoo 历史价格方法 → 1 个通用函数             :b3, 2, 5
+
+    section P2 中优
+    Macro1~5 URL 提取为配置常量                    :c1, 3, 6
+    错误处理: On Error Resume Next → 显式处理      :c2, 4, 7
+    函数重命名: Macro{N} → 语义化名称              :c3, 5, 8
+
+    section P3 低优
+    删除 4 个重复连接清理函数                       :d1, 6, 7
+    删除缩放/滚动 Macro (8/9/35/36/40)             :d2, 7, 8
+    合并 TSECFSQT + TSECFSQTF                      :d3, 7, 8
+```
+
+## 重构详细说明
+
+### P0: 抽离 Module2 公共函数（最高优先级）
+
+**问题：** 14 个跨模块公共函数定义在 Module2（美股业务模块）中，违反职责分离原则。
+
+**方案：**
+
+```         
+当前状态:
+  Module2.bas = 美股业务逻辑 + 公共连接函数 + 公共工具函数
+
+重构后:
+  network_utils.bas (新建)
+    ├── ConnectXMLHTTP()
+    ├── ConnectMarketWatch()
+    ├── ConnectWinHttp()
+    └── ConnectIE() → 后续替换
+
+  data_utils.bas (新建)
+    ├── highlow()
+    ├── unitconversion()
+    ├── splitt()
+    ├── HandleNulls()
+    ├── mkw() / yho() / wsj() / yhondd()
+    └── Delete_Pictures()
+
+  Module2.bas (瘦身)
+    ├── Macro2()
+    ├── Yahoo_Price_Dividend_Split()
+    └── 美股专用逻辑
+```
+
+### P1: 统一 Yahoo 历史价格
+
+**问题：** 4 个几乎相同的函数分布在 4 个模块中。
+
+| 函数                                          | 模块 | 差异点                 |
+|----------------------|----------------------|-----------------------------|
+| `Yahoo_Price_Dividend_Split(cd$, dc)`         | M2   | V8 JSON API            |
+| `HK_Yahoo_Price_Dividend_Split(cd$, dc)`      | M3   | CSV + `.HK` 后缀       |
+| `CN_Yahoo_Price_Dividend_Split(cd$, ex$, dc)` | M4   | CSV + `.SS`/`.SZ` 后缀 |
+| `WW_Yahoo_Price_Dividend_Split(cd$, nd$, dc)` | M5   | CSV + 动态后缀         |
+
+**方案：** 合并为 1 个通用函数：
+
+``` vb
+Sub Yahoo_Price_Dividend_Split(cd$, suffix$, dc As Long, useJSON As Boolean)
+```
+
+### P2: URL 配置外部化
+
+**问题：** 所有 URL 硬编码在 Macro 函数体内，任何网站改版都需要修改代码。
+
+**方案：** 将 URL 模板提取到配置 Sheet 或常量模块：
+
+``` vb
+' config_urls.bas
+Public Const URL_MDJ_BASE = "http://pscnetinvest.moneydj.com.tw/z/zc/"
+Public Const URL_MW_STOCK = "https://www.marketwatch.com/investing/Stock/"
+Public Const URL_YAHOO_V8 = "https://query1.finance.yahoo.com/v8/finance/chart/"
+```
+
+# 附录: 完整函数索引 {#sec-appendix}
+
+## 按数据管线阶段分类
+
+::: panel-tabset
+### ① 数据来源（URL构造）
+
+URL 构造逻辑内联在以下函数中（无独立函数）：
+
+| 主函数 | 数据源数量 | 主要域名 |
+|----------------------|:-------------------------:|------------------------|
+| Macro1 | 13 | moneydj.com.tw, twse.com.tw, tpex.org.tw |
+| Macro2 | 18+ | marketwatch.com, wsj.com, yahoo.com, seekingalpha.com |
+| Macro3 | 8 | aastocks.com, yahoo.com, wise.com |
+| Macro4 | 8 | sina.com.cn, aastocks.com, yahoo.com |
+| Macro5 | 11 | wsj.com, yahoo.com, wise.com, aastocks.com |
+| Macro10\~14 | 各2\~3 | twse.com.tw, finviz.com, investing.com, aastocks.com |
+| exdiv | 2 | moneydj.com.tw |
+| pf | 2 | yahoo.com, wise.com |
+
+### ② 网络抓取
+
+| 函数                 | 方法             | 定义   | 调用者         |
+|----------------------|------------------|--------|----------------|
+| `TSECFSQT`           | QueryTables      | M1     | M1, M9         |
+| `TSECFSQTF`          | QueryTables+POST | M1     | M1             |
+| `ConnectMarketWatch` | QueryTables      | M2     | M2\~M8         |
+| `ConnectXMLHTTP`     | MSXML2           | M2     | M2, M5, M6     |
+| `ConnectWinHttp`     | WinHttp          | M2     | M2, M3, M5, M8 |
+| `ConnectIE`          | IE               | M2     | M6             |
+| `TWReport`           | MSXML2+DOM       | M1     | M1             |
+| `OTC`                | MSXML2+POST      | M1     | M1             |
+| `Stocklist`          | QueryTables      | shared | Sheet1         |
+| `Yahoo_Price_*` ×4   | MSXML2/WinHttp   | M2\~M5 | M2\~M5         |
+
+### ③ 数据清洗
+
+| 函数                       | 作用                | 定义  |
+|----------------------------|---------------------|-------|
+| `unitconversion`           | K/M/B/T → 数字      | M2    |
+| `SEASONTF`                 | 季度日期标准化      | M1    |
+| `YEARTF`                   | 年度日期标准化      | M1    |
+| `splitt`                   | 拆股比率文本 → 数字 | M2    |
+| `HandleNulls`              | JSON null → 0       | M2    |
+| `mkw`/`yho`/`wsj`/`yhondd` | 代号格式转换        | M2/M5 |
+
+### ④ 财务计算
+
+| 函数      | 作用               | 定义            |
+|-----------|--------------------|-----------------|
+| `highlow` | 拆股调整历史高低价 | M2              |
+| `cpbf`    | 巴菲特距离         | M8              |
+| `pfn`     | 组合汇总           | M8              |
+| `taxtb`   | 税率表计算         | M9              |
+| XIRR      | 年化收益率         | M8 (Excel 内建) |
+
+### ⑤ Excel 写入
+
+| 函数                   | 作用             | 定义           |
+|------------------------|------------------|----------------|
+| `fm6`                  | 选股表格式化     | M6             |
+| `fm7`                  | 收藏表格式化     | M7             |
+| `fm8`                  | 绩效表格式化     | M8             |
+| `addlink`              | 超链接批量添加   | M7             |
+| `ERRLOG`               | 错误日志写入 V47 | M1             |
+| `ProtectSheet`         | 锁定工作表       | shared         |
+| `Delete_Pictures`      | 清除内嵌图片     | M7             |
+| `QueryTablesDelete`    | 清除查询连接     | ThisWorkbook_7 |
+| `lst` / `w2k` / `ak2k` | 收藏数据映射     | M7             |
+:::

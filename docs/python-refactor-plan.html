@@ -1,0 +1,2743 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-Hans" xml:lang="zh-Hans"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.27">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Trading Project Team">
+<meta name="dcterms.date" content="2026-02-26">
+
+<title>Python 重构架构设计方案</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="python-refactor-plan_files/libs/clipboard/clipboard.min.js"></script>
+<script src="python-refactor-plan_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="python-refactor-plan_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="python-refactor-plan_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="python-refactor-plan_files/libs/quarto-html/popper.min.js"></script>
+<script src="python-refactor-plan_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="python-refactor-plan_files/libs/quarto-html/anchor.min.js"></script>
+<link href="python-refactor-plan_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="python-refactor-plan_files/libs/quarto-html/quarto-syntax-highlighting-ed96de9b727972fe78a7b5d16c58bf87.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="python-refactor-plan_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="python-refactor-plan_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="python-refactor-plan_files/libs/bootstrap/bootstrap-790280a9dc14a0ef3629ebb49602f3d6.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="python-refactor-plan_files/libs/quarto-diagram/mermaid.min.js"></script>
+<script src="python-refactor-plan_files/libs/quarto-diagram/mermaid-init.js"></script>
+<link href="python-refactor-plan_files/libs/quarto-diagram/mermaid.css" rel="stylesheet">
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">目录</h2>
+   
+  <ul>
+  <li><a href="#sec-summary" id="toc-sec-summary" class="nav-link active" data-scroll-target="#sec-summary"><span class="header-section-number">1</span> 执行摘要</a>
+  <ul class="collapse">
+  <li><a href="#迁移动机" id="toc-迁移动机" class="nav-link" data-scroll-target="#迁移动机"><span class="header-section-number">1.1</span> 迁移动机</a></li>
+  <li><a href="#迁移原则" id="toc-迁移原则" class="nav-link" data-scroll-target="#迁移原则"><span class="header-section-number">1.2</span> 迁移原则</a></li>
+  </ul></li>
+  <li><a href="#sec-architecture" id="toc-sec-architecture" class="nav-link" data-scroll-target="#sec-architecture"><span class="header-section-number">2</span> 新系统架构</a>
+  <ul class="collapse">
+  <li><a href="#三层架构总图" id="toc-三层架构总图" class="nav-link" data-scroll-target="#三层架构总图"><span class="header-section-number">2.1</span> 三层架构总图</a></li>
+  <li><a href="#与-vba-旧架构的对应关系" id="toc-与-vba-旧架构的对应关系" class="nav-link" data-scroll-target="#与-vba-旧架构的对应关系"><span class="header-section-number">2.2</span> 与 VBA 旧架构的对应关系</a></li>
+  </ul></li>
+  <li><a href="#sec-structure" id="toc-sec-structure" class="nav-link" data-scroll-target="#sec-structure"><span class="header-section-number">3</span> 推荐项目结构</a>
+  <ul class="collapse">
+  <li><a href="#目录树" id="toc-目录树" class="nav-link" data-scroll-target="#目录树"><span class="header-section-number">3.1</span> 目录树</a></li>
+  <li><a href="#关键设计决策" id="toc-关键设计决策" class="nav-link" data-scroll-target="#关键设计决策"><span class="header-section-number">3.2</span> 关键设计决策</a></li>
+  </ul></li>
+  <li><a href="#sec-mapping" id="toc-sec-mapping" class="nav-link" data-scroll-target="#sec-mapping"><span class="header-section-number">4</span> VBA → Python 函数映射</a>
+  <ul class="collapse">
+  <li><a href="#数据抓取层最大变化" id="toc-数据抓取层最大变化" class="nav-link" data-scroll-target="#数据抓取层最大变化"><span class="header-section-number">4.1</span> 数据抓取层（最大变化）</a>
+  <ul class="collapse">
+  <li><a href="#yfinance-可替代的-vba-函数" id="toc-yfinance-可替代的-vba-函数" class="nav-link" data-scroll-target="#yfinance-可替代的-vba-函数"><span class="header-section-number">4.1.1</span> yfinance 可替代的 VBA 函数</a></li>
+  <li><a href="#仍需自行抓取的数据台股专用" id="toc-仍需自行抓取的数据台股专用" class="nav-link" data-scroll-target="#仍需自行抓取的数据台股专用"><span class="header-section-number">4.1.2</span> 仍需自行抓取的数据（台股专用）</a></li>
+  </ul></li>
+  <li><a href="#业务逻辑层结构不变实现升级" id="toc-业务逻辑层结构不变实现升级" class="nav-link" data-scroll-target="#业务逻辑层结构不变实现升级"><span class="header-section-number">4.2</span> 业务逻辑层（结构不变，实现升级）</a></li>
+  <li><a href="#工具层大幅简化" id="toc-工具层大幅简化" class="nav-link" data-scroll-target="#工具层大幅简化"><span class="header-section-number">4.3</span> 工具层（大幅简化）</a></li>
+  </ul></li>
+  <li><a href="#sec-deletable" id="toc-sec-deletable" class="nav-link" data-scroll-target="#sec-deletable"><span class="header-section-number">5</span> 可删除/优化的 VBA 逻辑</a>
+  <ul class="collapse">
+  <li><a href="#完全可删除的代码" id="toc-完全可删除的代码" class="nav-link" data-scroll-target="#完全可删除的代码"><span class="header-section-number">5.1</span> 完全可删除的代码</a>
+  <ul class="collapse">
+  <li><a href="#按类别详列" id="toc-按类别详列" class="nav-link" data-scroll-target="#按类别详列"><span class="header-section-number">5.1.1</span> 按类别详列</a></li>
+  </ul></li>
+  <li><a href="#保留但改写的逻辑" id="toc-保留但改写的逻辑" class="nav-link" data-scroll-target="#保留但改写的逻辑"><span class="header-section-number">5.2</span> 保留但改写的逻辑</a></li>
+  </ul></li>
+  <li><a href="#sec-datasource" id="toc-sec-datasource" class="nav-link" data-scroll-target="#sec-datasource"><span class="header-section-number">6</span> 数据源策略</a>
+  <ul class="collapse">
+  <li><a href="#api-优先替代方案" id="toc-api-优先替代方案" class="nav-link" data-scroll-target="#api-优先替代方案"><span class="header-section-number">6.1</span> API 优先替代方案</a></li>
+  <li><a href="#yfinance-能力矩阵" id="toc-yfinance-能力矩阵" class="nav-link" data-scroll-target="#yfinance-能力矩阵"><span class="header-section-number">6.2</span> yfinance 能力矩阵</a></li>
+  <li><a href="#台股数据源备选方案" id="toc-台股数据源备选方案" class="nav-link" data-scroll-target="#台股数据源备选方案"><span class="header-section-number">6.3</span> 台股数据源备选方案</a></li>
+  </ul></li>
+  <li><a href="#sec-anti-scraping" id="toc-sec-anti-scraping" class="nav-link" data-scroll-target="#sec-anti-scraping"><span class="header-section-number">7</span> 反爬策略</a>
+  <ul class="collapse">
+  <li><a href="#策略矩阵" id="toc-策略矩阵" class="nav-link" data-scroll-target="#策略矩阵"><span class="header-section-number">7.1</span> 策略矩阵</a></li>
+  <li><a href="#httpclient-设计要点" id="toc-httpclient-设计要点" class="nav-link" data-scroll-target="#httpclient-设计要点"><span class="header-section-number">7.2</span> HttpClient 设计要点</a></li>
+  <li><a href="#vba-旧方法-vs-python-新方法对比" id="toc-vba-旧方法-vs-python-新方法对比" class="nav-link" data-scroll-target="#vba-旧方法-vs-python-新方法对比"><span class="header-section-number">7.3</span> VBA 旧方法 vs Python 新方法对比</a></li>
+  </ul></li>
+  <li><a href="#sec-pseudocode" id="toc-sec-pseudocode" class="nav-link" data-scroll-target="#sec-pseudocode"><span class="header-section-number">8</span> 核心模块伪代码</a>
+  <ul class="collapse">
+  <li><a href="#数据层yfinanceprovider" id="toc-数据层yfinanceprovider" class="nav-link" data-scroll-target="#数据层yfinanceprovider"><span class="header-section-number">8.1</span> 数据层：YFinanceProvider</a></li>
+  <li><a href="#业务层performancetracker" id="toc-业务层performancetracker" class="nav-link" data-scroll-target="#业务层performancetracker"><span class="header-section-number">8.2</span> 业务层：PerformanceTracker</a></li>
+  <li><a href="#业务层valuationengine" id="toc-业务层valuationengine" class="nav-link" data-scroll-target="#业务层valuationengine"><span class="header-section-number">8.3</span> 业务层：ValuationEngine</a></li>
+  </ul></li>
+  <li><a href="#sec-roadmap" id="toc-sec-roadmap" class="nav-link" data-scroll-target="#sec-roadmap"><span class="header-section-number">9</span> 重构优先级路线图</a>
+  <ul class="collapse">
+  <li><a href="#四阶段实施计划" id="toc-四阶段实施计划" class="nav-link" data-scroll-target="#四阶段实施计划"><span class="header-section-number">9.1</span> 四阶段实施计划</a></li>
+  <li><a href="#各阶段详细说明" id="toc-各阶段详细说明" class="nav-link" data-scroll-target="#各阶段详细说明"><span class="header-section-number">9.2</span> 各阶段详细说明</a>
+  <ul class="collapse">
+  <li><a href="#phase-1-数据层最高优先级" id="toc-phase-1-数据层最高优先级" class="nav-link" data-scroll-target="#phase-1-数据层最高优先级"><span class="header-section-number">9.2.1</span> Phase 1: 数据层（最高优先级）</a></li>
+  <li><a href="#phase-2-业务层" id="toc-phase-2-业务层" class="nav-link" data-scroll-target="#phase-2-业务层"><span class="header-section-number">9.2.2</span> Phase 2: 业务层</a></li>
+  <li><a href="#phase-3-表现层" id="toc-phase-3-表现层" class="nav-link" data-scroll-target="#phase-3-表现层"><span class="header-section-number">9.2.3</span> Phase 3: 表现层</a></li>
+  <li><a href="#phase-4-优化可选" id="toc-phase-4-优化可选" class="nav-link" data-scroll-target="#phase-4-优化可选"><span class="header-section-number">9.2.4</span> Phase 4: 优化（可选）</a></li>
+  </ul></li>
+  </ul></li>
+  <li><a href="#sec-tech-stack" id="toc-sec-tech-stack" class="nav-link" data-scroll-target="#sec-tech-stack"><span class="header-section-number">10</span> 技术栈与依赖</a>
+  <ul class="collapse">
+  <li><a href="#pyproject.toml-核心依赖" id="toc-pyproject.toml-核心依赖" class="nav-link" data-scroll-target="#pyproject.toml-核心依赖"><span class="header-section-number">10.1</span> pyproject.toml 核心依赖</a></li>
+  <li><a href="#与现有-python-环境的关系" id="toc-与现有-python-环境的关系" class="nav-link" data-scroll-target="#与现有-python-环境的关系"><span class="header-section-number">10.2</span> 与现有 Python 环境的关系</a></li>
+  </ul></li>
+  <li><a href="#sec-risks" id="toc-sec-risks" class="nav-link" data-scroll-target="#sec-risks"><span class="header-section-number">11</span> 风险与应对</a>
+  <ul class="collapse">
+  <li><a href="#风险矩阵" id="toc-风险矩阵" class="nav-link" data-scroll-target="#风险矩阵"><span class="header-section-number">11.1</span> 风险矩阵</a></li>
+  <li><a href="#迁移期间的共存策略" id="toc-迁移期间的共存策略" class="nav-link" data-scroll-target="#迁移期间的共存策略"><span class="header-section-number">11.2</span> 迁移期间的共存策略</a></li>
+  </ul></li>
+  <li><a href="#sec-appendix" id="toc-sec-appendix" class="nav-link" data-scroll-target="#sec-appendix"><span class="header-section-number">12</span> 附录</a>
+  <ul class="collapse">
+  <li><a href="#a.-完整-vba-python-映射速查表" id="toc-a.-完整-vba-python-映射速查表" class="nav-link" data-scroll-target="#a.-完整-vba-python-映射速查表"><span class="header-section-number">12.1</span> A. 完整 VBA → Python 映射速查表</a></li>
+  <li><a href="#b.-相关分析报告索引" id="toc-b.-相关分析报告索引" class="nav-link" data-scroll-target="#b.-相关分析报告索引"><span class="header-section-number">12.2</span> B. 相关分析报告索引</a></li>
+  </ul></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Python 重构架构设计方案</h1>
+<p class="subtitle lead">盈再表 VBA 系统 → Python 现代化迁移蓝图</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">作者</div>
+    <div class="quarto-title-meta-contents">
+             <p>Trading Project Team </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">发布于</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">2026-02-26</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="sec-summary" class="level1" data-number="1">
+<h1 data-number="1"><span class="header-section-number">1</span> 执行摘要</h1>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">提示</span>一句话总结
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>将盈再表从 <strong>Windows-only VBA 单体系统</strong> 迁移为 <strong>跨平台 Python 三层架构</strong>，以 yfinance 为核心数据源，用 pandas 替代 Excel 单元格计算，用 openpyxl/xlwings 保持 Excel 兼容，最终实现<strong>可维护、可测试、跨平台</strong>的现代化投资分析系统。</p>
+</div>
+</div>
+<section id="迁移动机" class="level2" data-number="1.1">
+<h2 data-number="1.1" class="anchored" data-anchor-id="迁移动机"><span class="header-section-number">1.1</span> 迁移动机</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 42%">
+<col style="width: 57%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>现状痛点</th>
+<th>Python 方案</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>完全依赖 Windows COM 组件（MSXML2、WinHttp、IE）</td>
+<td><code>requests</code> + <code>yfinance</code> — 跨平台</td>
+</tr>
+<tr class="even">
+<td>10+ 个脆弱的 HTML 抓取数据源</td>
+<td>yfinance API — 单一稳定接口</td>
+</tr>
+<tr class="odd">
+<td><code>On Error Resume Next</code> 静默吞错</td>
+<td>Python 结构化异常 + logging</td>
+</tr>
+<tr class="even">
+<td>90+ 函数分散在 9 个 Module 中，重复代码严重</td>
+<td>OOP 类封装 + 职责分离</td>
+</tr>
+<tr class="odd">
+<td>所有 URL / 列号硬编码在代码中</td>
+<td>配置文件（YAML / .env）外部化</td>
+</tr>
+<tr class="even">
+<td>无法在 macOS 运行</td>
+<td>Python 天然跨平台</td>
+</tr>
+<tr class="odd">
+<td>无单元测试</td>
+<td>pytest 全覆盖</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="迁移原则" class="level2" data-number="1.2">
+<h2 data-number="1.2" class="anchored" data-anchor-id="迁移原则"><span class="header-section-number">1.2</span> 迁移原则</h2>
+<ol type="1">
+<li><strong>渐进式迁移</strong> — VBA 和 Python 共存过渡，不一次性全部重写</li>
+<li><strong>数据优先</strong> — 先迁移数据抓取层（价值最高、风险最大的部分）</li>
+<li><strong>API 优于抓取</strong> — 能用 API 的绝不再 scrape HTML</li>
+<li><strong>Excel 兼容</strong> — 保留 <code>.xlsm</code> 作为 UI 前端，Python 作为后端引擎</li>
+<li><strong>可测试</strong> — 每个模块都有对应的单元测试</li>
+</ol>
+</section>
+</section>
+<section id="sec-architecture" class="level1" data-number="2">
+<h1 data-number="2"><span class="header-section-number">2</span> 新系统架构</h1>
+<section id="三层架构总图" class="level2" data-number="2.1">
+<h2 data-number="2.1" class="anchored" data-anchor-id="三层架构总图"><span class="header-section-number">2.1</span> 三层架构总图</h2>
+<div class="cell" data-fig-width="100%" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-architecture" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-architecture-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-architecture">graph TB
+    subgraph presentation["表现层 (Presentation)"]
+        direction LR
+        EXCEL["Excel .xlsm&lt;br/&gt;&lt;small&gt;xlwings UDF 驱动&lt;/small&gt;&lt;br/&gt;&lt;small&gt;保留原始 Sheet 布局&lt;/small&gt;"]
+        CLI["CLI 工具&lt;br/&gt;&lt;small&gt;命令行快速查询&lt;/small&gt;&lt;br/&gt;&lt;small&gt;python -m yinzaibiao query 2330&lt;/small&gt;"]
+        WEB["Web Dashboard&lt;br/&gt;&lt;small&gt;(Phase 3 — 可选)&lt;/small&gt;&lt;br/&gt;&lt;small&gt;Streamlit / Dash&lt;/small&gt;"]
+    end
+
+    subgraph business["业务逻辑层 (Business Logic)"]
+        direction LR
+        ANALYZER["StockAnalyzer&lt;br/&gt;&lt;small&gt;单股财务体检&lt;/small&gt;"]
+        PORTFOLIO["PortfolioManager&lt;br/&gt;&lt;small&gt;组合管理 + 批量更新&lt;/small&gt;"]
+        PERF["PerformanceTracker&lt;br/&gt;&lt;small&gt;XIRR + 巴菲特距离&lt;/small&gt;"]
+        TAX["TaxCalculator&lt;br/&gt;&lt;small&gt;台股除息税 + 补充保费&lt;/small&gt;"]
+        SCREENER["IndexScreener&lt;br/&gt;&lt;small&gt;指数选股 + PE 筛选&lt;/small&gt;"]
+        VALUATION["ValuationEngine&lt;br/&gt;&lt;small&gt;便宜价/合理价/昂贵价&lt;/small&gt;"]
+    end
+
+    subgraph data["数据层 (Data Access)"]
+        direction LR
+        YF["YFinanceProvider&lt;br/&gt;&lt;small&gt;yfinance 封装&lt;/small&gt;&lt;br/&gt;&lt;small&gt;历史价格/财报/股息&lt;/small&gt;"]
+        TW["TWMarketProvider&lt;br/&gt;&lt;small&gt;TWSE + TPEX + MoneyDJ&lt;/small&gt;&lt;br/&gt;&lt;small&gt;台股专用数据&lt;/small&gt;"]
+        FX["FXProvider&lt;br/&gt;&lt;small&gt;汇率获取&lt;/small&gt;&lt;br/&gt;&lt;small&gt;ECB / Wise / yfinance&lt;/small&gt;"]
+        CACHE["CacheManager&lt;br/&gt;&lt;small&gt;SQLite 本地缓存&lt;/small&gt;&lt;br/&gt;&lt;small&gt;避免重复请求&lt;/small&gt;"]
+    end
+
+    subgraph infra["基础设施 (Infrastructure)"]
+        direction LR
+        CONFIG["ConfigManager&lt;br/&gt;&lt;small&gt;YAML 配置&lt;/small&gt;"]
+        LOG["Logger&lt;br/&gt;&lt;small&gt;结构化日志&lt;/small&gt;"]
+        HTTP["HttpClient&lt;br/&gt;&lt;small&gt;requests 封装&lt;/small&gt;&lt;br/&gt;&lt;small&gt;重试 + 限速 + UA&lt;/small&gt;"]
+        EXCEL_IO["ExcelIO&lt;br/&gt;&lt;small&gt;openpyxl / xlwings&lt;/small&gt;&lt;br/&gt;&lt;small&gt;读写 Excel&lt;/small&gt;"]
+    end
+
+    EXCEL --&gt; ANALYZER &amp; PORTFOLIO &amp; PERF &amp; TAX &amp; SCREENER
+    CLI --&gt; ANALYZER &amp; PORTFOLIO &amp; PERF
+    WEB --&gt; ANALYZER &amp; PORTFOLIO &amp; PERF
+
+    ANALYZER --&gt; YF &amp; TW &amp; FX
+    PORTFOLIO --&gt; ANALYZER
+    PERF --&gt; FX
+    TAX --&gt; TW
+    SCREENER --&gt; YF &amp; TW
+    VALUATION --&gt; YF
+
+    YF --&gt; HTTP &amp; CACHE
+    TW --&gt; HTTP &amp; CACHE
+    FX --&gt; HTTP &amp; CACHE
+
+    HTTP --&gt; CONFIG &amp; LOG
+    EXCEL_IO --&gt; CONFIG
+    CACHE --&gt; LOG
+
+    style presentation fill:#e3f2fd,stroke:#1565c0
+    style business fill:#fff3e0,stroke:#f57c00
+    style data fill:#e8f5e9,stroke:#388e3c
+    style infra fill:#f3e5f5,stroke:#7b1fa2
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-architecture-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;1: Python 新系统三层架构
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="与-vba-旧架构的对应关系" class="level2" data-number="2.2">
+<h2 data-number="2.2" class="anchored" data-anchor-id="与-vba-旧架构的对应关系"><span class="header-section-number">2.2</span> 与 VBA 旧架构的对应关系</h2>
+<div class="cell" data-fig-width="100%" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-mapping" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-mapping-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-mapping">graph LR
+    subgraph old["VBA 旧系统"]
+        direction TB
+        O_S1["Sheet1~5.cls&lt;br/&gt;Worksheet_Change"]
+        O_M1["Module1~5&lt;br/&gt;数据抓取 × 5"]
+        O_M6["Module6&lt;br/&gt;指数选股"]
+        O_M7["Module7&lt;br/&gt;组合管理"]
+        O_M8["Module8&lt;br/&gt;绩效追踪"]
+        O_M9["Module9&lt;br/&gt;税务计算"]
+        O_SM["shared_modules&lt;br/&gt;findAll / Protect"]
+        O_M2U["Module2 工具函数&lt;br/&gt;Connect* / highlow"]
+        O_JC["JsonConverter&lt;br/&gt;(实为 M8 副本)"]
+    end
+
+    subgraph new["Python 新系统"]
+        direction TB
+        N_XW["xlwings UDF&lt;br/&gt;Excel 集成层"]
+        N_DP["data_providers/&lt;br/&gt;yfinance + tw_market + fx"]
+        N_SC["screener.py&lt;br/&gt;指数选股"]
+        N_PM["portfolio.py&lt;br/&gt;组合管理"]
+        N_PF["performance.py&lt;br/&gt;XIRR + 巴菲特距离"]
+        N_TX["tax.py&lt;br/&gt;税务计算"]
+        N_UT["utils/&lt;br/&gt;http + cache + config"]
+        N_DEL["已删除&lt;br/&gt;不再需要"]
+    end
+
+    O_S1 --&gt;|"替代"| N_XW
+    O_M1 --&gt;|"合并 × 5 → 1"| N_DP
+    O_M6 --&gt;|"1:1"| N_SC
+    O_M7 --&gt;|"1:1"| N_PM
+    O_M8 --&gt;|"1:1"| N_PF
+    O_M9 --&gt;|"1:1"| N_TX
+    O_SM --&gt;|"拆分"| N_UT
+    O_M2U --&gt;|"拆分"| N_UT
+    O_JC --&gt;|"删除"| N_DEL
+
+    style old fill:#ffcdd2,stroke:#c62828
+    style new fill:#c8e6c9,stroke:#2e7d32
+    style N_DEL fill:#eeeeee,stroke:#9e9e9e
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-mapping-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;2: VBA 旧架构 → Python 新架构 映射
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="sec-structure" class="level1" data-number="3">
+<h1 data-number="3"><span class="header-section-number">3</span> 推荐项目结构</h1>
+<section id="目录树" class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="目录树"><span class="header-section-number">3.1</span> 目录树</h2>
+<pre><code>Trading Project/
+├── pyproject.toml                  ← 项目元数据 + 依赖管理
+├── README.md
+├── .env.example                    ← 环境变量模板
+├── config/
+│   └── settings.yaml               ← 数据源 URL、列映射、阈值配置
+│
+├── src/
+│   └── yinzaibiao/                  ← 主包（盈再表拼音）
+│       ├── __init__.py
+│       ├── __main__.py              ← CLI 入口: python -m yinzaibiao
+│       │
+│       ├── models/                  ← 数据模型（dataclass）
+│       │   ├── __init__.py
+│       │   ├── stock.py             ← StockInfo, FinancialReport
+│       │   ├── portfolio.py         ← PortfolioItem, Holding
+│       │   └── market.py           ← MarketType(Enum), IndexConstituent
+│       │
+│       ├── data_providers/          ← 数据层：获取原始数据
+│       │   ├── __init__.py
+│       │   ├── base.py              ← DataProvider(ABC) 抽象基类
+│       │   ├── yfinance_provider.py ← yfinance 封装（美/港/中/全球）
+│       │   ├── tw_market.py         ← 台股专用（TWSE/TPEX/MoneyDJ）
+│       │   ├── fx_provider.py       ← 汇率获取
+│       │   └── cache.py             ← SQLite 缓存层
+│       │
+│       ├── analyzers/               ← 业务层：分析和计算
+│       │   ├── __init__.py
+│       │   ├── stock_analyzer.py    ← 单股财务体检
+│       │   ├── valuation.py         ← 估值模型（便宜/合理/昂贵价）
+│       │   ├── portfolio.py         ← 组合管理 + 批量更新
+│       │   ├── performance.py       ← XIRR + 巴菲特距离
+│       │   ├── screener.py          ← 指数选股 + PE 筛选
+│       │   └── tax.py               ← 台股税务计算
+│       │
+│       ├── excel/                   ← 表现层：Excel 集成
+│       │   ├── __init__.py
+│       │   ├── xlwings_udf.py       ← xlwings UDF 函数
+│       │   ├── writer.py            ← openpyxl 写入逻辑
+│       │   └── formatter.py         ← 单元格格式化（替代 fm6/fm7/fm8）
+│       │
+│       └── utils/                   ← 基础设施
+│           ├── __init__.py
+│           ├── http_client.py       ← requests 封装（重试/限速/UA轮换）
+│           ├── config.py            ← 配置管理
+│           ├── logger.py            ← 结构化日志
+│           └── converters.py        ← 单位转换/代号映射/日期格式化
+│
+├── tests/                           ← 测试
+│   ├── conftest.py
+│   ├── test_data_providers/
+│   ├── test_analyzers/
+│   ├── test_excel/
+│   └── fixtures/                    ← 测试用的 mock 数据
+│       ├── sample_financials.json
+│       └── sample_prices.csv
+│
+├── Excel/                           ← 原始 VBA 文件（保留参考）
+│   ├── 盈再表250723.xlsm
+│   ├── Modules/
+│   ├── Objects/
+│   └── Forms/
+│
+├── docs/                            ← 分析报告
+│   ├── architecture-report.qmd
+│   ├── module-analysis.qmd
+│   ├── business-logic.qmd
+│   ├── dataflow-analysis.qmd
+│   ├── event-entry-analysis.qmd
+│   └── python-refactor-plan.qmd     ← 本文档
+│
+└── venv/                            ← Python 虚拟环境</code></pre>
+</section>
+<section id="关键设计决策" class="level2" data-number="3.2">
+<h2 data-number="3.2" class="anchored" data-anchor-id="关键设计决策"><span class="header-section-number">3.2</span> 关键设计决策</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 40%">
+<col style="width: 30%">
+<col style="width: 30%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>决策点</th>
+<th>选择</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>包管理</td>
+<td><code>pyproject.toml</code></td>
+<td>现代 Python 标准（PEP 621），取代 setup.py + requirements.txt</td>
+</tr>
+<tr class="even">
+<td>数据模型</td>
+<td><code>dataclass</code></td>
+<td>轻量、类型安全、VBA <code>baseInfo</code> 的自然升级</td>
+</tr>
+<tr class="odd">
+<td>配置格式</td>
+<td>YAML</td>
+<td>比 JSON 可读性好，支持注释</td>
+</tr>
+<tr class="even">
+<td>缓存后端</td>
+<td>SQLite</td>
+<td>零配置、嵌入式、pandas 原生支持</td>
+</tr>
+<tr class="odd">
+<td>Excel 集成</td>
+<td>xlwings（macOS/Windows）+ openpyxl（纯 Python）</td>
+<td>xlwings 支持实时交互，openpyxl 支持无 Excel 环境</td>
+</tr>
+<tr class="even">
+<td>HTTP 客户端</td>
+<td>requests + tenacity</td>
+<td>成熟、稳定、自动重试</td>
+</tr>
+<tr class="odd">
+<td>测试框架</td>
+<td>pytest + pytest-mock</td>
+<td>Python 生态标准</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="sec-mapping" class="level1" data-number="4">
+<h1 data-number="4"><span class="header-section-number">4</span> VBA → Python 函数映射</h1>
+<section id="数据抓取层最大变化" class="level2" data-number="4.1">
+<h2 data-number="4.1" class="anchored" data-anchor-id="数据抓取层最大变化"><span class="header-section-number">4.1</span> 数据抓取层（最大变化）</h2>
+<p>VBA 现有 5 个几乎相同的 Module（Module1~5），每个对应一个市场，内部各自实现 HTTP 连接和数据解析。 Python 中合并为 <strong>2 个 Provider</strong>，通过参数区分市场。</p>
+<section id="yfinance-可替代的-vba-函数" class="level3" data-number="4.1.1">
+<h3 data-number="4.1.1" class="anchored" data-anchor-id="yfinance-可替代的-vba-函数"><span class="header-section-number">4.1.1</span> yfinance 可替代的 VBA 函数</h3>
+<div id="tbl-yf-replace" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-yf-replace-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;1: yfinance 可替代的 VBA 函数
+</figcaption>
+<div aria-describedby="tbl-yf-replace-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 24%">
+<col style="width: 26%">
+<col style="width: 28%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>VBA 函数</th>
+<th>所在 Module</th>
+<th>Python 替代</th>
+<th>yfinance API</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Yahoo_Price_Dividend_Split</code></td>
+<td>M2</td>
+<td><code>YFinanceProvider.get_history()</code></td>
+<td><code>Ticker.history()</code></td>
+</tr>
+<tr class="even">
+<td><code>HK_Yahoo_Price_Dividend_Split</code></td>
+<td>M3</td>
+<td>同上（后缀 <code>.HK</code>）</td>
+<td><code>Ticker("0005.HK").history()</code></td>
+</tr>
+<tr class="odd">
+<td><code>CN_Yahoo_Price_Dividend_Split</code></td>
+<td>M4</td>
+<td>同上（后缀 <code>.SS</code>/<code>.SZ</code>）</td>
+<td><code>Ticker("600036.SS").history()</code></td>
+</tr>
+<tr class="even">
+<td><code>WW_Yahoo_Price_Dividend_Split</code></td>
+<td>M5</td>
+<td>同上（动态后缀）</td>
+<td><code>Ticker("7203.T").history()</code></td>
+</tr>
+<tr class="odd">
+<td><code>ConnectMarketWatch</code>（财报部分）</td>
+<td>M2</td>
+<td><code>YFinanceProvider.get_financials()</code></td>
+<td><code>Ticker.income_stmt</code> / <code>balance_sheet</code> / <code>cashflow</code></td>
+</tr>
+<tr class="even">
+<td><code>highlow</code></td>
+<td>M2</td>
+<td><code>YFinanceProvider.get_history()</code></td>
+<td>已含拆股调整价格</td>
+</tr>
+<tr class="odd">
+<td><code>unitconversion</code></td>
+<td>M2</td>
+<td><strong>不再需要</strong></td>
+<td>yfinance 返回原始数值</td>
+</tr>
+<tr class="even">
+<td><code>splitt</code></td>
+<td>M2</td>
+<td><strong>不再需要</strong></td>
+<td>yfinance 自动拆股调整</td>
+</tr>
+<tr class="odd">
+<td><code>HandleNulls</code></td>
+<td>M2</td>
+<td><strong>不再需要</strong></td>
+<td>pandas 原生 NaN 处理</td>
+</tr>
+<tr class="even">
+<td><code>yhondd</code></td>
+<td>M5</td>
+<td><code>YFinanceProvider._get_suffix()</code></td>
+<td>内置映射字典</td>
+</tr>
+<tr class="odd">
+<td><code>mkw</code> / <code>yho</code> / <code>wsj</code></td>
+<td>M2</td>
+<td><strong>不再需要</strong></td>
+<td>统一使用 yfinance 代号格式</td>
+</tr>
+<tr class="even">
+<td><code>CCRUMBT</code> / <code>DCSV</code></td>
+<td>M2</td>
+<td><strong>已废弃</strong></td>
+<td>yfinance 内部处理认证</td>
+</tr>
+<tr class="odd">
+<td><code>ConnectIE</code> / <code>DelIE</code></td>
+<td>M2</td>
+<td><strong>已废弃</strong></td>
+<td>不再需要 IE 浏览器</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="callout callout-style-default callout-important callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">重要</span>关键洞察：yfinance 可替代约 60% 的数据抓取代码
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>VBA 系统的 5 个数据模块（Module1~5）中，<strong>约 60% 的代码用于 HTTP 连接、HTML 解析和数据清洗</strong>。 yfinance 将这些全部封装为单个 Python 调用，且自动处理拆股调整、单位转换、null 值等。</p>
+</div>
+</div>
+</section>
+<section id="仍需自行抓取的数据台股专用" class="level3" data-number="4.1.2">
+<h3 data-number="4.1.2" class="anchored" data-anchor-id="仍需自行抓取的数据台股专用"><span class="header-section-number">4.1.2</span> 仍需自行抓取的数据（台股专用）</h3>
+<div id="tbl-tw-custom" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-tw-custom-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;2: 台股专用函数（需 requests 自行抓取）
+</figcaption>
+<div aria-describedby="tbl-tw-custom-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 22%">
+<col style="width: 34%">
+<col style="width: 17%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>VBA 函数</th>
+<th>数据源</th>
+<th>Python 替代</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>TSECFSQT</code></td>
+<td>MoneyDJ</td>
+<td><code>TWMarketProvider.get_financials()</code></td>
+<td>台股季度财报 yfinance 不提供</td>
+</tr>
+<tr class="even">
+<td><code>TSECFSQTF</code></td>
+<td>MoneyDJ</td>
+<td>同上</td>
+<td>POST 请求版</td>
+</tr>
+<tr class="odd">
+<td><code>TWReport</code></td>
+<td>MoneyDJ</td>
+<td><code>TWMarketProvider.get_report()</code></td>
+<td>HTML 财报表格</td>
+</tr>
+<tr class="even">
+<td><code>OTC</code></td>
+<td>TPEX</td>
+<td><code>TWMarketProvider.get_otc_monthly()</code></td>
+<td>OTC 月统计</td>
+</tr>
+<tr class="odd">
+<td><code>Stocklist</code></td>
+<td>TWSE/TPEX</td>
+<td><code>TWMarketProvider.get_stock_list()</code></td>
+<td>台股代号清单</td>
+</tr>
+<tr class="even">
+<td><code>OTCC</code>（M6）</td>
+<td>TPEX</td>
+<td><code>TWMarketProvider.get_otc_constituents()</code></td>
+<td>OTC 成分股</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+</section>
+<section id="业务逻辑层结构不变实现升级" class="level2" data-number="4.2">
+<h2 data-number="4.2" class="anchored" data-anchor-id="业务逻辑层结构不变实现升级"><span class="header-section-number">4.2</span> 业务逻辑层（结构不变，实现升级）</h2>
+<div id="tbl-biz-mapping" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-biz-mapping-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;3: 业务逻辑层映射
+</figcaption>
+<div aria-describedby="tbl-biz-mapping-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 21%">
+<col style="width: 19%">
+<col style="width: 36%">
+<col style="width: 21%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>VBA 函数</th>
+<th>Module</th>
+<th>Python 类.方法</th>
+<th>变化说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Macro15~19</code></td>
+<td>M7</td>
+<td><code>PortfolioManager.save_stock()</code></td>
+<td>5 个函数 → 1 个（市场参数化）</td>
+</tr>
+<tr class="even">
+<td><code>Macro20</code></td>
+<td>M7</td>
+<td><code>PortfolioManager.batch_update()</code></td>
+<td>编排逻辑不变，内部调数据层</td>
+</tr>
+<tr class="odd">
+<td><code>Macro21~29</code></td>
+<td>M7</td>
+<td><code>PortfolioManager.sort_by()</code></td>
+<td>10 个排序 Macro → 1 个参数化</td>
+</tr>
+<tr class="even">
+<td><code>lst</code> / <code>w2k</code> / <code>ak2k</code></td>
+<td>M7</td>
+<td><code>PortfolioManager._map_data()</code></td>
+<td>数据映射内部化</td>
+</tr>
+<tr class="odd">
+<td><code>fm7</code> / <code>addlink</code></td>
+<td>M7</td>
+<td><code>ExcelFormatter.format_portfolio()</code></td>
+<td>格式化抽到表现层</td>
+</tr>
+<tr class="even">
+<td><code>Macro30</code></td>
+<td>M8</td>
+<td><code>PerformanceTracker.calculate_all()</code></td>
+<td>主入口</td>
+</tr>
+<tr class="odd">
+<td><code>pf(f)</code></td>
+<td>M8</td>
+<td><code>PerformanceTracker.calculate_single()</code></td>
+<td>单组合绩效</td>
+</tr>
+<tr class="even">
+<td><code>pfn(f)</code></td>
+<td>M8</td>
+<td><code>PerformanceTracker.calculate_total()</code></td>
+<td>总绩效汇总</td>
+</tr>
+<tr class="odd">
+<td><code>cpbf(f)</code></td>
+<td>M8</td>
+<td><code>PerformanceTracker.buffett_distance()</code></td>
+<td>巴菲特距离</td>
+</tr>
+<tr class="even">
+<td><code>ddlet(f)</code></td>
+<td>M8</td>
+<td><code>PerformanceTracker._remove_marked()</code></td>
+<td>删除标 X 行</td>
+</tr>
+<tr class="odd">
+<td><code>tax()</code></td>
+<td>M9</td>
+<td><code>TaxCalculator.import_tax_file()</code></td>
+<td>导入外部税务文件</td>
+</tr>
+<tr class="even">
+<td><code>exdiv()</code></td>
+<td>M9</td>
+<td><code>TaxCalculator.calculate_dividend_tax()</code></td>
+<td>除息税主逻辑</td>
+</tr>
+<tr class="odd">
+<td><code>taxtb()</code></td>
+<td>M9</td>
+<td><code>TaxCalculator.generate_tax_table()</code></td>
+<td>税率表生成</td>
+</tr>
+<tr class="even">
+<td><code>Macro10~14</code></td>
+<td>M6</td>
+<td><code>IndexScreener.screen()</code></td>
+<td>5 个 → 1 个参数化</td>
+</tr>
+<tr class="odd">
+<td><code>fm6</code> / 排序函数</td>
+<td>M6</td>
+<td><code>IndexScreener.sort_results()</code></td>
+<td>12 个排序 → 1 个</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section id="工具层大幅简化" class="level2" data-number="4.3">
+<h2 data-number="4.3" class="anchored" data-anchor-id="工具层大幅简化"><span class="header-section-number">4.3</span> 工具层（大幅简化）</h2>
+<div id="tbl-util-mapping" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-util-mapping-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;4: 工具层映射
+</figcaption>
+<div aria-describedby="tbl-util-mapping-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 44%">
+<col style="width: 22%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>VBA 函数</th>
+<th>Python 替代</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>findAll</code></td>
+<td><code>StockLookup.find()</code> + pandas</td>
+<td>用 DataFrame 查找替代 Excel Range.Find</td>
+</tr>
+<tr class="even">
+<td><code>ProtectSheet</code> / <code>UnprotectSheet</code></td>
+<td><code>ExcelIO.protect()</code> / <code>unprotect()</code></td>
+<td>仅在 Excel 模式下需要</td>
+</tr>
+<tr class="odd">
+<td><code>Delete_Connection_XL2003/2007</code></td>
+<td><strong>删除</strong></td>
+<td>Python 不产生 QueryTable 连接</td>
+</tr>
+<tr class="even">
+<td><code>QueryTablesDelete</code></td>
+<td><strong>删除</strong></td>
+<td>同上</td>
+</tr>
+<tr class="odd">
+<td><code>Delete_Pictures</code></td>
+<td><strong>删除</strong></td>
+<td>Python 不内嵌图片</td>
+</tr>
+<tr class="even">
+<td><code>ERRLOG</code></td>
+<td><code>logging.error()</code></td>
+<td>Python 标准日志</td>
+</tr>
+<tr class="odd">
+<td><code>RSURLTYPE</code></td>
+<td><code>HttpClient.get()</code> 内置</td>
+<td>负载均衡逻辑内置到 HTTP 客户端</td>
+</tr>
+<tr class="even">
+<td><code>SEASONTF</code> / <code>YEARTF</code></td>
+<td><code>pd.to_datetime()</code></td>
+<td>pandas 日期处理</td>
+</tr>
+<tr class="odd">
+<td><code>enEvt</code></td>
+<td><strong>删除</strong></td>
+<td>Python 无 EnableEvents 概念</td>
+</tr>
+<tr class="even">
+<td><code>Auto_open</code></td>
+<td><strong>删除</strong></td>
+<td>Python 无需初始化标记</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+</section>
+<section id="sec-deletable" class="level1" data-number="5">
+<h1 data-number="5"><span class="header-section-number">5</span> 可删除/优化的 VBA 逻辑</h1>
+<section id="完全可删除的代码" class="level2" data-number="5.1">
+<h2 data-number="5.1" class="anchored" data-anchor-id="完全可删除的代码"><span class="header-section-number">5.1</span> 完全可删除的代码</h2>
+<p>基于前序分析报告（dataflow-analysis 报告 <strong>?@sec-assessment</strong>），以下 VBA 代码在 Python 迁移后完全不需要：</p>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-deletable" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-deletable-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-deletable">pie title 可删除代码占比估算
+    "HTTP 连接函数 (Connect*)" : 25
+    "HTML DOM 解析逻辑" : 20
+    "单位转换/代号映射" : 10
+    "Excel 连接清理" : 8
+    "已废弃函数 (hkhis/cnhis/glhis...)" : 12
+    "IE 自动化" : 5
+    "JsonConverter.bas 副本" : 5
+    "需保留并改写的业务逻辑" : 15
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-deletable-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;3: 可删除的 VBA 代码分类
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<section id="按类别详列" class="level3" data-number="5.1.1">
+<h3 data-number="5.1.1" class="anchored" data-anchor-id="按类别详列"><span class="header-section-number">5.1.1</span> 按类别详列</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 24%">
+<col style="width: 52%">
+<col style="width: 24%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>类别</th>
+<th>VBA 函数/文件</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>HTTP 连接</strong></td>
+<td><code>ConnectXMLHTTP</code>, <code>ConnectMarketWatch</code>, <code>ConnectWinHttp</code>, <code>ConnectIE</code>, <code>DelIE</code></td>
+<td><code>requests</code> + <code>yfinance</code> 替代</td>
+</tr>
+<tr class="even">
+<td><strong>Yahoo 旧版</strong></td>
+<td><code>CCRUMBT</code>, <code>DCSV</code>, <code>CCRUMBT_BAK</code>, <code>DCSV_BAK</code></td>
+<td>旧版 Yahoo crumb 机制已失效</td>
+</tr>
+<tr class="odd">
+<td><strong>废弃历史方法</strong></td>
+<td><code>hkhis</code>, <code>cnhis</code>, <code>glhis</code>, <code>ushis</code>, <code>Yahoo_Price_Div_Split_20241111</code></td>
+<td>已被新版 Yahoo 方法替代</td>
+</tr>
+<tr class="even">
+<td><strong>IE 自动化</strong></td>
+<td><code>ConnectIE</code>, <code>DelIE</code>, Macro12/13 的 IE 调用</td>
+<td>IE 已停产，Python 用 requests 即可</td>
+</tr>
+<tr class="odd">
+<td><strong>Excel 清理</strong></td>
+<td><code>Delete_Connection_XL2003/2007/2003_2/2007_2</code>, <code>QueryTablesDelete</code></td>
+<td>Python 不产生遗留连接</td>
+</tr>
+<tr class="even">
+<td><strong>视图调整</strong></td>
+<td><code>Macro8/9/35/36/40</code></td>
+<td>缩放/滚动操作不需要自动化</td>
+</tr>
+<tr class="odd">
+<td><strong>单位转换</strong></td>
+<td><code>unitconversion</code>, <code>HandleNulls</code>, <code>splitt</code></td>
+<td>yfinance 返回原始数值，pandas 处理 NaN</td>
+</tr>
+<tr class="even">
+<td><strong>代号转换</strong></td>
+<td><code>mkw</code>, <code>wsj</code></td>
+<td>不再需要 MarketWatch/WSJ 格式</td>
+</tr>
+<tr class="odd">
+<td><strong>重复副本</strong></td>
+<td><code>JsonConverter.bas</code>（实为 Module8 副本）</td>
+<td>完全无用</td>
+</tr>
+<tr class="even">
+<td><strong>Sheet 保护</strong></td>
+<td><code>ProtectSheet</code>, <code>UnprotectSheet</code></td>
+<td>Python 后端不操作 Sheet 保护</td>
+</tr>
+<tr class="odd">
+<td><strong>初始化</strong></td>
+<td><code>Auto_open</code>, ZZ1 标记写入</td>
+<td>Python 无需此机制</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="保留但改写的逻辑" class="level2" data-number="5.2">
+<h2 data-number="5.2" class="anchored" data-anchor-id="保留但改写的逻辑"><span class="header-section-number">5.2</span> 保留但改写的逻辑</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 27%">
+<col style="width: 27%">
+<col style="width: 45%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>业务逻辑</th>
+<th>VBA 来源</th>
+<th>Python 改写要点</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>预期报酬率公式</td>
+<td>M7.w2k 内联</td>
+<td>提取为 <code>ValuationEngine.expected_return()</code></td>
+</tr>
+<tr class="even">
+<td>巴菲特距离公式</td>
+<td>M8.cpbf</td>
+<td>保持算法，改为 <code>numpy</code> 计算</td>
+</tr>
+<tr class="odd">
+<td>XIRR 计算</td>
+<td>M8.pf (Excel 公式)</td>
+<td>使用 <code>scipy.optimize.brentq</code> 或 <code>pyxirr</code></td>
+</tr>
+<tr class="even">
+<td>补充保费规则 (2.11%)</td>
+<td>M9.exdiv</td>
+<td>提取为配置项</td>
+</tr>
+<tr class="odd">
+<td>台股代号查找</td>
+<td>shared.findAll</td>
+<td>pandas DataFrame 查找</td>
+</tr>
+<tr class="even">
+<td>市场代号映射</td>
+<td>M5.yhondd</td>
+<td>配置字典</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="sec-datasource" class="level1" data-number="6">
+<h1 data-number="6"><span class="header-section-number">6</span> 数据源策略</h1>
+<section id="api-优先替代方案" class="level2" data-number="6.1">
+<h2 data-number="6.1" class="anchored" data-anchor-id="api-优先替代方案"><span class="header-section-number">6.1</span> API 优先替代方案</h2>
+<div class="cell" data-fig-width="100%" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-datasource" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-datasource-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-datasource">graph TB
+    subgraph before["VBA 现状：10+ 个 HTML 数据源"]
+        direction TB
+        B_MDJ["MoneyDJ&lt;br/&gt;HTML 抓取&lt;br/&gt;❌ 脆弱"]
+        B_MW["MarketWatch&lt;br/&gt;QueryTables&lt;br/&gt;❌ 脆弱"]
+        B_WSJ["WSJ&lt;br/&gt;XMLHTTP&lt;br/&gt;❌ 脆弱"]
+        B_YF["Yahoo Finance&lt;br/&gt;CSV/JSON&lt;br/&gt;⚠️ 半稳定"]
+        B_AA["AAStocks&lt;br/&gt;QueryTables&lt;br/&gt;❌ 脆弱"]
+        B_SINA["Sina Finance&lt;br/&gt;QueryTables&lt;br/&gt;❌ 脆弱"]
+        B_FV["Finviz&lt;br/&gt;QueryTables&lt;br/&gt;❌ 脆弱"]
+        B_INV["Investing.com&lt;br/&gt;IE 自动化&lt;br/&gt;❌ 已失效"]
+        B_WISE["Wise.com&lt;br/&gt;WinHttp&lt;br/&gt;⚠️ 半稳定"]
+    end
+
+    subgraph after["Python 方案：3 个稳定数据源"]
+        direction TB
+        A_YF["yfinance&lt;br/&gt;&lt;small&gt;✅ 美/港/中/全球&lt;/small&gt;&lt;br/&gt;&lt;small&gt;财报 + 历史价格 + 股息&lt;/small&gt;&lt;br/&gt;&lt;small&gt;自动拆股调整&lt;/small&gt;"]
+        A_TW["TWSE/TPEX 官方&lt;br/&gt;&lt;small&gt;✅ 台股专用&lt;/small&gt;&lt;br/&gt;&lt;small&gt;requests + BeautifulSoup&lt;/small&gt;&lt;br/&gt;&lt;small&gt;MoneyDJ 作为备选&lt;/small&gt;"]
+        A_FX["yfinance 汇率&lt;br/&gt;&lt;small&gt;✅ 汇率&lt;/small&gt;&lt;br/&gt;&lt;small&gt;Ticker('USDTWD=X')&lt;/small&gt;&lt;br/&gt;&lt;small&gt;ECB 作为备选&lt;/small&gt;"]
+    end
+
+    B_MW --&gt;|"替代"| A_YF
+    B_WSJ --&gt;|"替代"| A_YF
+    B_YF --&gt;|"升级"| A_YF
+    B_AA --&gt;|"替代"| A_YF
+    B_SINA --&gt;|"替代"| A_YF
+    B_FV --&gt;|"替代"| A_YF
+    B_INV --&gt;|"替代"| A_YF
+    B_MDJ --&gt;|"部分替代"| A_TW
+    B_WISE --&gt;|"替代"| A_FX
+
+    style before fill:#ffcdd2,stroke:#c62828
+    style after fill:#c8e6c9,stroke:#2e7d32
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-datasource-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;4: 数据源替代策略：HTML抓取 → API
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="yfinance-能力矩阵" class="level2" data-number="6.2">
+<h2 data-number="6.2" class="anchored" data-anchor-id="yfinance-能力矩阵"><span class="header-section-number">6.2</span> yfinance 能力矩阵</h2>
+<div id="tbl-yf-matrix" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-yf-matrix-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;5: yfinance 能力矩阵
+</figcaption>
+<div aria-describedby="tbl-yf-matrix-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 19%">
+<col style="width: 19%">
+<col style="width: 28%">
+<col style="width: 19%">
+<col style="width: 13%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>数据类型</th>
+<th>VBA 来源</th>
+<th>yfinance API</th>
+<th>覆盖市场</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>历史日线</td>
+<td>Yahoo CSV/JSON</td>
+<td><code>Ticker.history(period="10y")</code></td>
+<td>全市场</td>
+<td>含拆股调整</td>
+</tr>
+<tr class="even">
+<td>损益表</td>
+<td>MarketWatch/MoneyDJ</td>
+<td><code>Ticker.income_stmt</code></td>
+<td>美/港/中/全球</td>
+<td>年度</td>
+</tr>
+<tr class="odd">
+<td>季度损益表</td>
+<td>MarketWatch/MoneyDJ</td>
+<td><code>Ticker.quarterly_income_stmt</code></td>
+<td>美/港/中/全球</td>
+<td>季度</td>
+</tr>
+<tr class="even">
+<td>资产负债表</td>
+<td>MarketWatch/MoneyDJ</td>
+<td><code>Ticker.balance_sheet</code></td>
+<td>美/港/中/全球</td>
+<td>年度</td>
+</tr>
+<tr class="odd">
+<td>现金流量表</td>
+<td>MarketWatch</td>
+<td><code>Ticker.cashflow</code></td>
+<td>美/港/中/全球</td>
+<td>年度</td>
+</tr>
+<tr class="even">
+<td>股息历史</td>
+<td>Yahoo CSV</td>
+<td><code>Ticker.dividends</code></td>
+<td>全市场</td>
+<td>含除息日</td>
+</tr>
+<tr class="odd">
+<td>拆股历史</td>
+<td>Yahoo CSV</td>
+<td><code>Ticker.splits</code></td>
+<td>全市场</td>
+<td>—</td>
+</tr>
+<tr class="even">
+<td>公司概况</td>
+<td>MarketWatch/AAStocks</td>
+<td><code>Ticker.info</code></td>
+<td>全市场</td>
+<td>含市值/PE/行业</td>
+</tr>
+<tr class="odd">
+<td>汇率</td>
+<td>Wise.com</td>
+<td><code>Ticker("USDTWD=X").history()</code></td>
+<td>—</td>
+<td>实时+历史</td>
+</tr>
+<tr class="even">
+<td>指数成分股</td>
+<td>Finviz/Investing</td>
+<td><strong>不支持</strong></td>
+<td>—</td>
+<td>需自行抓取或用替代</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">警告</span>yfinance 的局限
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<ol type="1">
+<li><strong>台股季度财报覆盖不完整</strong> — 需保留 MoneyDJ/TWSE 作为台股数据源</li>
+<li><strong>指数成分股不支持</strong> — 需从交易所官网或第三方获取</li>
+<li><strong>无官方 SLA</strong> — 免费 API，可能被限速或变更</li>
+<li><strong>台股月营收不提供</strong> — 需从 TWSE/TPEX 官方获取</li>
+</ol>
+</div>
+</div>
+</section>
+<section id="台股数据源备选方案" class="level2" data-number="6.3">
+<h2 data-number="6.3" class="anchored" data-anchor-id="台股数据源备选方案"><span class="header-section-number">6.3</span> 台股数据源备选方案</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 17%">
+<col style="width: 26%">
+<col style="width: 26%">
+<col style="width: 29%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>数据</th>
+<th>首选来源</th>
+<th>备选来源</th>
+<th>Python 库</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>台股季度/年度财报</td>
+<td>TWSE MOPS</td>
+<td>MoneyDJ HTML</td>
+<td>requests + BeautifulSoup</td>
+</tr>
+<tr class="even">
+<td>月营收</td>
+<td>TWSE/TPEX 官网</td>
+<td>GoodInfo</td>
+<td>requests</td>
+</tr>
+<tr class="odd">
+<td>台股代号清单</td>
+<td>TWSE OpenAPI</td>
+<td>TPEX OpenAPI</td>
+<td>requests (JSON)</td>
+</tr>
+<tr class="even">
+<td>台股历史日线</td>
+<td>yfinance (.TW)</td>
+<td>TWSE CSV</td>
+<td>yfinance</td>
+</tr>
+<tr class="odd">
+<td>OTC 月统计</td>
+<td>TPEX 官网</td>
+<td>—</td>
+<td>requests</td>
+</tr>
+<tr class="even">
+<td>除息日/股利</td>
+<td>TWSE MOPS</td>
+<td>MoneyDJ</td>
+<td>requests</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="sec-anti-scraping" class="level1" data-number="7">
+<h1 data-number="7"><span class="header-section-number">7</span> 反爬策略</h1>
+<div class="callout callout-style-default callout-important callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">重要</span>为什么需要反爬策略？
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>VBA 原系统使用 <code>On Error Resume Next</code> 忽略所有网络错误。 一旦被目标网站限速或封锁，数据静默缺失，用户完全不知情。 Python 系统必须主动应对反爬机制，确保数据可靠性。</p>
+</div>
+</div>
+<section id="策略矩阵" class="level2" data-number="7.1">
+<h2 data-number="7.1" class="anchored" data-anchor-id="策略矩阵"><span class="header-section-number">7.1</span> 策略矩阵</h2>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-anti-scraping" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-anti-scraping-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-anti-scraping">graph LR
+    subgraph L1["第一层：礼貌请求"]
+        RATE["请求限速&lt;br/&gt;&lt;small&gt;1~2 秒间隔&lt;/small&gt;"]
+        UA["User-Agent 轮换&lt;br/&gt;&lt;small&gt;随机浏览器 UA&lt;/small&gt;"]
+        HEADER["完整 HTTP 头&lt;br/&gt;&lt;small&gt;Referer / Accept / Language&lt;/small&gt;"]
+    end
+
+    subgraph L2["第二层：缓存避免"]
+        CACHE_L["本地缓存&lt;br/&gt;&lt;small&gt;SQLite TTL 缓存&lt;/small&gt;"]
+        DEDUP["请求去重&lt;br/&gt;&lt;small&gt;相同代号 24h 内不重复&lt;/small&gt;"]
+    end
+
+    subgraph L3["第三层：故障恢复"]
+        RETRY["指数退避重试&lt;br/&gt;&lt;small&gt;tenacity 库&lt;/small&gt;"]
+        FALLBACK["数据源降级&lt;br/&gt;&lt;small&gt;yfinance → TWSE → MoneyDJ&lt;/small&gt;"]
+        ALERT["日志告警&lt;br/&gt;&lt;small&gt;连续失败 → 通知用户&lt;/small&gt;"]
+    end
+
+    L1 --&gt; L2 --&gt; L3
+
+    style L1 fill:#e8f5e9,stroke:#388e3c
+    style L2 fill:#fff3e0,stroke:#f57c00
+    style L3 fill:#ffcdd2,stroke:#c62828
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-anti-scraping-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;5: 反爬防御 — 多层策略
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="httpclient-设计要点" class="level2" data-number="7.2">
+<h2 data-number="7.2" class="anchored" data-anchor-id="httpclient-设计要点"><span class="header-section-number">7.2</span> HttpClient 设计要点</h2>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># src/yinzaibiao/utils/http_client.py — 核心设计</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> HttpClient:</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""统一 HTTP 客户端，替代 VBA 的 4 种连接方式。"""</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, config: <span class="bu">dict</span>):</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.session <span class="op">=</span> requests.Session()</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.rate_limiter <span class="op">=</span> RateLimiter(</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>            calls_per_second<span class="op">=</span><span class="fl">0.5</span>  <span class="co"># 每 2 秒最多 1 次请求</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.cache <span class="op">=</span> SQLiteCache(ttl_hours<span class="op">=</span><span class="dv">24</span>)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.user_agents <span class="op">=</span> [...]  <span class="co"># UA 池</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">@retry</span>(</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        stop<span class="op">=</span>stop_after_attempt(<span class="dv">3</span>),</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        wait<span class="op">=</span>wait_exponential(<span class="bu">min</span><span class="op">=</span><span class="dv">2</span>, <span class="bu">max</span><span class="op">=</span><span class="dv">30</span>),</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        retry<span class="op">=</span>retry_if_exception_type(requests.RequestException)</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get(<span class="va">self</span>, url: <span class="bu">str</span>, <span class="op">**</span>kwargs) <span class="op">-&gt;</span> requests.Response:</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>        <span class="co">"""带限速、缓存、重试的 GET 请求。"""</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 1. 检查缓存</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 2. 限速等待</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 3. 设置随机 UA + 完整头</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 4. 发送请求</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 5. 写入缓存</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 6. 返回响应</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>        ...</span></code></pre></div><button title="复制到剪贴板" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="vba-旧方法-vs-python-新方法对比" class="level2" data-number="7.3">
+<h2 data-number="7.3" class="anchored" data-anchor-id="vba-旧方法-vs-python-新方法对比"><span class="header-section-number">7.3</span> VBA 旧方法 vs Python 新方法对比</h2>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>维度</th>
+<th>VBA (ConnectXMLHTTP 等)</th>
+<th>Python (HttpClient)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>限速</td>
+<td>无</td>
+<td>可配置（默认 0.5 req/s）</td>
+</tr>
+<tr class="even">
+<td>重试</td>
+<td>无（On Error Resume Next）</td>
+<td>指数退避，最多 3 次</td>
+</tr>
+<tr class="odd">
+<td>缓存</td>
+<td>无（每次都重新请求）</td>
+<td>SQLite 缓存，TTL 可配置</td>
+</tr>
+<tr class="even">
+<td>User-Agent</td>
+<td>固定或无</td>
+<td>随机轮换池</td>
+</tr>
+<tr class="odd">
+<td>错误处理</td>
+<td>静默忽略</td>
+<td>结构化日志 + 用户通知</td>
+</tr>
+<tr class="even">
+<td>超时</td>
+<td>依赖 COM 默认值</td>
+<td>可配置（默认 30 秒）</td>
+</tr>
+<tr class="odd">
+<td>并发</td>
+<td>串行执行</td>
+<td>可扩展为 asyncio 并发</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="sec-pseudocode" class="level1" data-number="8">
+<h1 data-number="8"><span class="header-section-number">8</span> 核心模块伪代码</h1>
+<section id="数据层yfinanceprovider" class="level2" data-number="8.1">
+<h2 data-number="8.1" class="anchored" data-anchor-id="数据层yfinanceprovider"><span class="header-section-number">8.1</span> 数据层：YFinanceProvider</h2>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># src/yinzaibiao/data_providers/yfinance_provider.py</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dataclasses <span class="im">import</span> dataclass</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> yfinance <span class="im">as</span> yf</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 交易所后缀映射（替代 VBA yhondd 函数）</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>EXCHANGE_SUFFIX <span class="op">=</span> {</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="st">"TW"</span>: <span class="st">".TW"</span>,   <span class="st">"TWO"</span>: <span class="st">".TWO"</span>,  <span class="co"># 台股上市/上柜</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">"HK"</span>: <span class="st">".HK"</span>,                    <span class="co"># 港股</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="st">"CN_SH"</span>: <span class="st">".SS"</span>, <span class="st">"CN_SZ"</span>: <span class="st">".SZ"</span>, <span class="co"># 中股</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="st">"JP"</span>: <span class="st">".T"</span>,    <span class="st">"UK"</span>: <span class="st">".L"</span>,      <span class="co"># 日/英</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="st">"AU"</span>: <span class="st">".AX"</span>,   <span class="st">"KR"</span>: <span class="st">".KS"</span>,     <span class="co"># 澳/韩</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="st">"FR"</span>: <span class="st">".PA"</span>,   <span class="st">"CA"</span>: <span class="st">".TO"</span>,     <span class="co"># 法/加</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">"US"</span>: <span class="st">""</span>,                        <span class="co"># 美股无后缀</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> YFinanceProvider:</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""统一数据提供者 — 替代 Module2~5 的数据抓取逻辑。"""</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, cache: CacheManager, http: HttpClient):</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.cache <span class="op">=</span> cache</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.http <span class="op">=</span> http</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get_ticker(<span class="va">self</span>, code: <span class="bu">str</span>, market: <span class="bu">str</span>) <span class="op">-&gt;</span> yf.Ticker:</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>        suffix <span class="op">=</span> EXCHANGE_SUFFIX.get(market, <span class="st">""</span>)</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> yf.Ticker(<span class="ss">f"</span><span class="sc">{</span>code<span class="sc">}{</span>suffix<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get_history(<span class="va">self</span>, code: <span class="bu">str</span>, market: <span class="bu">str</span>,</span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>                    period: <span class="bu">str</span> <span class="op">=</span> <span class="st">"10y"</span>) <span class="op">-&gt;</span> pd.DataFrame:</span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>        <span class="co">"""替代: Yahoo_Price_Dividend_Split + highlow + splitt。</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a><span class="co">        yfinance 自动返回拆股调整价格，无需手动调整。"""</span></span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>        ticker <span class="op">=</span> <span class="va">self</span>.get_ticker(code, market)</span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> ticker.history(period<span class="op">=</span>period)</span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get_financials(<span class="va">self</span>, code: <span class="bu">str</span>, market: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">dict</span>:</span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>        <span class="co">"""替代: ConnectMarketWatch 的财报抓取。</span></span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a><span class="co">        返回 {income_stmt, balance_sheet, cashflow} 的 DataFrame 字典。"""</span></span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>        ticker <span class="op">=</span> <span class="va">self</span>.get_ticker(code, market)</span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> {</span>
+<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>            <span class="st">"income_stmt"</span>: ticker.income_stmt,</span>
+<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>            <span class="st">"quarterly_income_stmt"</span>: ticker.quarterly_income_stmt,</span>
+<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a>            <span class="st">"balance_sheet"</span>: ticker.balance_sheet,</span>
+<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>            <span class="st">"quarterly_balance_sheet"</span>: ticker.quarterly_balance_sheet,</span>
+<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a>            <span class="st">"cashflow"</span>: ticker.cashflow,</span>
+<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get_dividends(<span class="va">self</span>, code: <span class="bu">str</span>, market: <span class="bu">str</span>) <span class="op">-&gt;</span> pd.Series:</span>
+<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a>        <span class="co">"""替代: Yahoo CSV 股息下载。"""</span></span>
+<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>.get_ticker(code, market).dividends</span>
+<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-52"><a href="#cb3-52" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get_info(<span class="va">self</span>, code: <span class="bu">str</span>, market: <span class="bu">str</span>) <span class="op">-&gt;</span> <span class="bu">dict</span>:</span>
+<span id="cb3-53"><a href="#cb3-53" aria-hidden="true" tabindex="-1"></a>        <span class="co">"""替代: ConnectMarketWatch 公司概况 + ConnectWinHttp 市值。"""</span></span>
+<span id="cb3-54"><a href="#cb3-54" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">self</span>.get_ticker(code, market).info</span>
+<span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> get_fx_rate(<span class="va">self</span>, from_ccy: <span class="bu">str</span>, to_ccy: <span class="bu">str</span> <span class="op">=</span> <span class="st">"TWD"</span>) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a>        <span class="co">"""替代: ConnectWinHttp(wise_url) 汇率抓取。"""</span></span>
+<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a>        pair <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>from_ccy<span class="sc">}{</span>to_ccy<span class="sc">}</span><span class="ss">=X"</span></span>
+<span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a>        ticker <span class="op">=</span> yf.Ticker(pair)</span>
+<span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a>        hist <span class="op">=</span> ticker.history(period<span class="op">=</span><span class="st">"1d"</span>)</span>
+<span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> hist[<span class="st">"Close"</span>].iloc[<span class="op">-</span><span class="dv">1</span>]</span></code></pre></div><button title="复制到剪贴板" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="业务层performancetracker" class="level2" data-number="8.2">
+<h2 data-number="8.2" class="anchored" data-anchor-id="业务层performancetracker"><span class="header-section-number">8.2</span> 业务层：PerformanceTracker</h2>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># src/yinzaibiao/analyzers/performance.py</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy.optimize <span class="im">import</span> brentq</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> PerformanceTracker:</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""替代 Module8 — 绩效追踪 + 巴菲特距离。"""</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    BUFFETT_ANNUAL_RETURN <span class="op">=</span> <span class="fl">0.20</span>   <span class="co"># 巴菲特 50 年 20%</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    BUFFETT_YEARS <span class="op">=</span> <span class="dv">50</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    BUFFETT_MULTIPLIER <span class="op">=</span> <span class="fl">1.20</span> <span class="op">**</span> <span class="dv">50</span>  <span class="co"># ≈ 9,100</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    NORMALIZE_BASE <span class="op">=</span> <span class="dv">3_701</span>          <span class="co"># 8年12%基准</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> calculate_xirr(<span class="va">self</span>, cashflows: <span class="bu">list</span>[<span class="bu">tuple</span>]) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>        <span class="co">"""替代 VBA 的 Excel XIRR 公式。</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="co">        cashflows: [(date, amount), ...] — 负数=买入，正数=卖出/现值</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a><span class="co">        """</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>        dates, amounts <span class="op">=</span> <span class="bu">zip</span>(<span class="op">*</span>cashflows)</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>        <span class="co"># 转换为年份差</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>        d0 <span class="op">=</span> <span class="bu">min</span>(dates)</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>        years <span class="op">=</span> [(d <span class="op">-</span> d0).days <span class="op">/</span> <span class="fl">365.25</span> <span class="cf">for</span> d <span class="kw">in</span> dates]</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>        <span class="kw">def</span> npv(rate):</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="bu">sum</span>(a <span class="op">/</span> (<span class="dv">1</span> <span class="op">+</span> rate) <span class="op">**</span> y</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>                      <span class="cf">for</span> a, y <span class="kw">in</span> <span class="bu">zip</span>(amounts, years))</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> brentq(npv, <span class="op">-</span><span class="fl">0.99</span>, <span class="fl">10.0</span>)</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> buffett_distance(<span class="va">self</span>, annual_return: <span class="bu">float</span>,</span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>                         invest_years: <span class="bu">float</span>) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>        <span class="co">"""替代 VBA cpbf() — 巴菲特距离公式。</span></span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a><span class="co">        Distance = 100 × √A × B / 3701</span></span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a><span class="co">        A = 1.2^(50 - invest_years)</span></span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a><span class="co">        B = log(9100) / log(1 + annual_return)</span></span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a><span class="co">        """</span></span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>        A <span class="op">=</span> <span class="fl">1.2</span> <span class="op">**</span> (<span class="va">self</span>.BUFFETT_YEARS <span class="op">-</span> invest_years)</span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> annual_return <span class="op">&lt;=</span> <span class="dv">0</span>:</span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="bu">float</span>(<span class="st">'inf'</span>)</span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>        B <span class="op">=</span> np.log(<span class="va">self</span>.BUFFETT_MULTIPLIER) <span class="op">/</span> np.log(<span class="dv">1</span> <span class="op">+</span> annual_return)</span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">100</span> <span class="op">*</span> np.sqrt(A) <span class="op">*</span> B <span class="op">/</span> <span class="va">self</span>.NORMALIZE_BASE</span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> evaluate(<span class="va">self</span>, distance: <span class="bu">float</span>) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
+<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a>        <span class="co">"""巴菲特距离评级。"""</span></span>
+<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> distance <span class="op">&lt;=</span> <span class="dv">21</span>:</span>
+<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">"堪比巴菲特！"</span></span>
+<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a>        <span class="cf">elif</span> distance <span class="op">&lt;=</span> <span class="dv">100</span>:</span>
+<span id="cb4-47"><a href="#cb4-47" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">"太棒了！"</span></span>
+<span id="cb4-48"><a href="#cb4-48" aria-hidden="true" tabindex="-1"></a>        <span class="cf">elif</span> distance <span class="op">&lt;=</span> <span class="dv">168</span>:</span>
+<span id="cb4-49"><a href="#cb4-49" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">"加油！"</span></span>
+<span id="cb4-50"><a href="#cb4-50" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:</span>
+<span id="cb4-51"><a href="#cb4-51" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">"常读讲义"</span></span></code></pre></div><button title="复制到剪贴板" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="业务层valuationengine" class="level2" data-number="8.3">
+<h2 data-number="8.3" class="anchored" data-anchor-id="业务层valuationengine"><span class="header-section-number">8.3</span> 业务层：ValuationEngine</h2>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># src/yinzaibiao/analyzers/valuation.py</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> ValuationEngine:</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""替代 Module7.w2k 中内联的估值逻辑。"""</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    HOLD_YEARS <span class="op">=</span> <span class="dv">8</span>  <span class="co"># 投资年限假设</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> expected_annual_return(<span class="va">self</span>, base_return: <span class="bu">float</span>,</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>                                current_price: <span class="bu">float</span>,</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>                                reference_price: <span class="bu">float</span>) <span class="op">-&gt;</span> <span class="bu">float</span>:</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>        <span class="co">"""预期年化报酬率 = 基础报酬率 - [(当前价/基准价)^(1/8) - 1]"""</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>        price_growth <span class="op">=</span> (current_price <span class="op">/</span> reference_price) <span class="op">**</span> (</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>            <span class="dv">1</span> <span class="op">/</span> <span class="va">self</span>.HOLD_YEARS) <span class="op">-</span> <span class="dv">1</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> base_return <span class="op">-</span> price_growth</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> price_zone(<span class="va">self</span>, expected_return: <span class="bu">float</span>) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>        <span class="co">"""便宜价/合理价/昂贵价 三区间判断。"""</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> expected_return <span class="op">&gt;</span> <span class="fl">0.15</span>:</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">"便宜（买入区）"</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>        <span class="cf">elif</span> expected_return <span class="op">&gt;</span> <span class="fl">0.08</span>:</span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">"合理（持有区）"</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:</span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> <span class="st">"昂贵（卖出区）"</span></span></code></pre></div><button title="复制到剪贴板" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+</section>
+<section id="sec-roadmap" class="level1" data-number="9">
+<h1 data-number="9"><span class="header-section-number">9</span> 重构优先级路线图</h1>
+<section id="四阶段实施计划" class="level2" data-number="9.1">
+<h2 data-number="9.1" class="anchored" data-anchor-id="四阶段实施计划"><span class="header-section-number">9.1</span> 四阶段实施计划</h2>
+<div class="cell" data-fig-width="100%" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-roadmap" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-roadmap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-roadmap">gantt
+    title Python 重构路线图
+    dateFormat YYYY-MM-DD
+    axisFormat %m月
+
+    section Phase 1: 数据层
+    项目初始化 (pyproject.toml + 结构)          :done, p1a, 2026-03-01, 3d
+    HttpClient + CacheManager                   :p1b, after p1a, 5d
+    YFinanceProvider (美/港/中/全球)              :crit, p1c, after p1b, 7d
+    TWMarketProvider (台股 TWSE/TPEX)            :p1d, after p1b, 10d
+    FXProvider (汇率)                           :p1e, after p1c, 3d
+    数据层单元测试                                :p1f, after p1e, 5d
+
+    section Phase 2: 业务层
+    StockAnalyzer (单股查询)                     :crit, p2a, after p1f, 5d
+    ValuationEngine (估值模型)                    :p2b, after p2a, 3d
+    PortfolioManager (组合管理)                   :p2c, after p2b, 7d
+    PerformanceTracker (XIRR + 巴菲特距离)       :p2d, after p2b, 5d
+    IndexScreener (指数选股)                      :p2e, after p2a, 5d
+    TaxCalculator (台股税务)                      :p2f, after p2a, 3d
+    业务层单元测试                                :p2g, after p2f, 5d
+
+    section Phase 3: 表现层
+    CLI 工具 (python -m yinzaibiao)              :p3a, after p2g, 5d
+    xlwings UDF 集成                             :p3b, after p3a, 7d
+    openpyxl Excel 写入器                        :p3c, after p3a, 5d
+    ExcelFormatter (格式化)                       :p3d, after p3c, 3d
+    集成测试                                      :p3e, after p3d, 5d
+
+    section Phase 4: 优化
+    性能优化 (并发请求)                            :p4a, after p3e, 5d
+    数据库存储 (SQLite → PostgreSQL 可选)          :p4b, after p3e, 5d
+    Web Dashboard (Streamlit, 可选)              :p4c, after p4b, 10d
+    文档 + 部署指南                                :p4d, after p4c, 5d
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-roadmap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;6: Python 重构四阶段路线图
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="各阶段详细说明" class="level2" data-number="9.2">
+<h2 data-number="9.2" class="anchored" data-anchor-id="各阶段详细说明"><span class="header-section-number">9.2</span> 各阶段详细说明</h2>
+<section id="phase-1-数据层最高优先级" class="level3" data-number="9.2.1">
+<h3 data-number="9.2.1" class="anchored" data-anchor-id="phase-1-数据层最高优先级"><span class="header-section-number">9.2.1</span> Phase 1: 数据层（最高优先级）</h3>
+<p><strong>目标：</strong> 用 Python 完全替代 VBA 的 HTTP 抓取 + 数据解析逻辑。</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 50%">
+<col style="width: 30%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>任务</th>
+<th>替代的 VBA 代码</th>
+<th>预期成果</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>YFinanceProvider</td>
+<td>Module2~5 的 Yahoo 相关函数（~60%代码）</td>
+<td>一个类替代 4 个 Module</td>
+</tr>
+<tr class="even">
+<td>TWMarketProvider</td>
+<td>Module1 的 TSECFSQT/TWReport/OTC</td>
+<td>台股数据独立 Provider</td>
+</tr>
+<tr class="odd">
+<td>HttpClient</td>
+<td>ConnectXMLHTTP/ConnectWinHttp/ConnectMarketWatch/ConnectIE</td>
+<td>1 个类替代 4 种 COM 连接</td>
+</tr>
+<tr class="even">
+<td>CacheManager</td>
+<td>无（VBA 无缓存）</td>
+<td><strong>新增能力</strong> — 减少 90% 重复请求</td>
+</tr>
+</tbody>
+</table>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">提示</span>Phase 1 完成标志
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>能通过 Python 获取任意市场（台/美/港/中/全球）的完整财务数据，并输出为 pandas DataFrame。 此阶段 VBA 系统仍正常运行，Python 仅作为数据获取的备选通道。</p>
+</div>
+</div>
+</section>
+<section id="phase-2-业务层" class="level3" data-number="9.2.2">
+<h3 data-number="9.2.2" class="anchored" data-anchor-id="phase-2-业务层"><span class="header-section-number">9.2.2</span> Phase 2: 业务层</h3>
+<p><strong>目标：</strong> 将 VBA 中硬编码的业务规则提取为可测试的 Python 类。</p>
+<p>关键业务规则迁移：</p>
+<ul>
+<li>预期报酬率公式 → <code>ValuationEngine</code></li>
+<li>巴菲特距离公式 → <code>PerformanceTracker.buffett_distance()</code></li>
+<li>XIRR 计算 → <code>scipy.optimize.brentq</code>（替代 Excel XIRR 公式）</li>
+<li>补充保费 2.11% → <code>TaxCalculator</code>（阈值提取为配置项）</li>
+<li>收藏排序（6 种）→ <code>PortfolioManager.sort_by(key=...)</code></li>
+</ul>
+</section>
+<section id="phase-3-表现层" class="level3" data-number="9.2.3">
+<h3 data-number="9.2.3" class="anchored" data-anchor-id="phase-3-表现层"><span class="header-section-number">9.2.3</span> Phase 3: 表现层</h3>
+<p><strong>目标：</strong> Python 后端与 Excel 前端的集成。</p>
+<p>两种集成模式：</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 28%">
+<col style="width: 28%">
+<col style="width: 42%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>模式</th>
+<th>工具</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>xlwings UDF</strong></td>
+<td>xlwings</td>
+<td>实时交互 — 在 Excel 中输入代号即触发 Python</td>
+</tr>
+<tr class="even">
+<td><strong>openpyxl 批量写入</strong></td>
+<td>openpyxl</td>
+<td>离线生成 — Python 脚本批量更新 Excel 文件</td>
+</tr>
+</tbody>
+</table>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># xlwings UDF 示例 — 替代 Sheet1.Worksheet_Change + Macro1</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> xlwings <span class="im">as</span> xw</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="at">@xw.func</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> query_stock(code: <span class="bu">str</span>, market: <span class="bu">str</span> <span class="op">=</span> <span class="st">"TW"</span>):</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""在 Excel 中输入 =query_stock("2330", "TW") 即可触发。"""</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    analyzer <span class="op">=</span> StockAnalyzer()</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    result <span class="op">=</span> analyzer.full_analysis(code, market)</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> result.to_excel_range()  <span class="co"># 返回 DataFrame 写入</span></span></code></pre></div><button title="复制到剪贴板" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="phase-4-优化可选" class="level3" data-number="9.2.4">
+<h3 data-number="9.2.4" class="anchored" data-anchor-id="phase-4-优化可选"><span class="header-section-number">9.2.4</span> Phase 4: 优化（可选）</h3>
+<ul>
+<li><strong>并发请求：</strong> <code>asyncio</code> + <code>aiohttp</code> 批量更新时并行抓取</li>
+<li><strong>Web Dashboard：</strong> Streamlit 单页应用，替代 Excel 前端</li>
+<li><strong>数据库：</strong> SQLite → PostgreSQL 升级（多用户场景）</li>
+</ul>
+</section>
+</section>
+</section>
+<section id="sec-tech-stack" class="level1" data-number="10">
+<h1 data-number="10"><span class="header-section-number">10</span> 技术栈与依赖</h1>
+<section id="pyproject.toml-核心依赖" class="level2" data-number="10.1">
+<h2 data-number="10.1" class="anchored" data-anchor-id="pyproject.toml-核心依赖"><span class="header-section-number">10.1</span> pyproject.toml 核心依赖</h2>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode toml code-with-copy"><code class="sourceCode toml"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">[project]</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="dt">name</span> <span class="op">=</span> <span class="st">"yinzaibiao"</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="dt">version</span> <span class="op">=</span> <span class="st">"0.1.0"</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="dt">requires-python</span> <span class="op">=</span> <span class="st">"&gt;=3.11"</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="dt">dependencies</span> <span class="op">=</span> <span class="op">[</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 数据获取</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">"yfinance&gt;=0.2.36"</span><span class="op">,</span>       <span class="co"># Yahoo Finance API 封装</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="st">"requests&gt;=2.31"</span><span class="op">,</span>          <span class="co"># HTTP 客户端</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">"beautifulsoup4&gt;=4.12"</span><span class="op">,</span>    <span class="co"># HTML 解析（台股专用）</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="st">"lxml&gt;=5.0"</span><span class="op">,</span>               <span class="co"># HTML/XML 解析器</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 数据处理</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    <span class="st">"pandas&gt;=2.1"</span><span class="op">,</span>             <span class="co"># DataFrame 核心</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    <span class="st">"numpy&gt;=1.26"</span><span class="op">,</span>             <span class="co"># 数值计算</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 财务计算</span></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>    <span class="st">"pyxirr&gt;=0.10"</span><span class="op">,</span>            <span class="co"># XIRR 高性能计算（Rust 实现）</span></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Excel 集成</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>    <span class="st">"openpyxl&gt;=3.1"</span><span class="op">,</span>           <span class="co"># Excel 读写（纯 Python）</span></span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>    <span class="st">"xlwings&gt;=0.30"</span><span class="op">,</span>           <span class="co"># Excel 实时交互（需安装 Excel）</span></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 基础设施</span></span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>    <span class="st">"tenacity&gt;=8.2"</span><span class="op">,</span>           <span class="co"># 重试机制</span></span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>    <span class="st">"pyyaml&gt;=6.0"</span><span class="op">,</span>             <span class="co"># 配置文件</span></span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>    <span class="st">"python-dotenv&gt;=1.0"</span><span class="op">,</span>      <span class="co"># 环境变量</span></span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a><span class="op">]</span></span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a><span class="kw">[project.optional-dependencies]</span></span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a><span class="dt">dev</span> <span class="op">=</span> <span class="op">[</span></span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>    <span class="st">"pytest&gt;=8.0"</span><span class="op">,</span></span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>    <span class="st">"pytest-mock&gt;=3.12"</span><span class="op">,</span></span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>    <span class="st">"pytest-cov&gt;=4.1"</span><span class="op">,</span></span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>    <span class="st">"ruff&gt;=0.3"</span><span class="op">,</span>               <span class="co"># Linter + Formatter</span></span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>    <span class="st">"mypy&gt;=1.8"</span><span class="op">,</span>               <span class="co"># 类型检查</span></span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a><span class="op">]</span></span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a><span class="dt">web</span> <span class="op">=</span> <span class="op">[</span></span>
+<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a>    <span class="st">"streamlit&gt;=1.30"</span><span class="op">,</span>         <span class="co"># Web Dashboard（可选）</span></span>
+<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a><span class="op">]</span></span>
+<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a><span class="kw">[project.scripts]</span></span>
+<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a><span class="dt">yinzaibiao</span> <span class="op">=</span> <span class="st">"yinzaibiao.__main__:main"</span></span></code></pre></div><button title="复制到剪贴板" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="与现有-python-环境的关系" class="level2" data-number="10.2">
+<h2 data-number="10.2" class="anchored" data-anchor-id="与现有-python-环境的关系"><span class="header-section-number">10.2</span> 与现有 Python 环境的关系</h2>
+<p>当前项目已有的 Python 基础设施：</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>已有</th>
+<th>状态</th>
+<th>计划</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Python 3.13.5</td>
+<td>已安装</td>
+<td>继续使用</td>
+</tr>
+<tr class="even">
+<td>venv</td>
+<td>已配置</td>
+<td>继续使用</td>
+</tr>
+<tr class="odd">
+<td>yfinance</td>
+<td>已安装在 venv</td>
+<td>升级到最新版</td>
+</tr>
+<tr class="even">
+<td>openpyxl</td>
+<td>已安装</td>
+<td>继续使用</td>
+</tr>
+<tr class="odd">
+<td>xlwings</td>
+<td>已安装</td>
+<td>继续使用</td>
+</tr>
+<tr class="even">
+<td>pandas</td>
+<td>已安装</td>
+<td>继续使用</td>
+</tr>
+<tr class="odd">
+<td>yfinance_demo.py</td>
+<td>概念验证</td>
+<td>演化为 YFinanceProvider</td>
+</tr>
+</tbody>
+</table>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">注记</span>现有代码可复用
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><code>yfinance_demo.py</code> 已验证了 yfinance 的基本可用性。 重构时可直接将其逻辑迁移到 <code>YFinanceProvider</code> 类中。</p>
+</div>
+</div>
+</section>
+</section>
+<section id="sec-risks" class="level1" data-number="11">
+<h1 data-number="11"><span class="header-section-number">11</span> 风险与应对</h1>
+<section id="风险矩阵" class="level2" data-number="11.1">
+<h2 data-number="11.1" class="anchored" data-anchor-id="风险矩阵"><span class="header-section-number">11.1</span> 风险矩阵</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 22%">
+<col style="width: 22%">
+<col style="width: 22%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>风险</th>
+<th style="text-align: center;">概率</th>
+<th style="text-align: center;">影响</th>
+<th>应对策略</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>yfinance API 被限速/变更</td>
+<td style="text-align: center;">中</td>
+<td style="text-align: center;">高</td>
+<td>本地缓存 + 多数据源降级</td>
+</tr>
+<tr class="even">
+<td>台股专用数据源（MoneyDJ）改版</td>
+<td style="text-align: center;">高</td>
+<td style="text-align: center;">中</td>
+<td>BeautifulSoup 解析 + TWSE 备选</td>
+</tr>
+<tr class="odd">
+<td>xlwings macOS 兼容性问题</td>
+<td style="text-align: center;">低</td>
+<td style="text-align: center;">中</td>
+<td>提供 openpyxl 纯 Python 备选</td>
+</tr>
+<tr class="even">
+<td>XIRR 计算精度与 Excel 不一致</td>
+<td style="text-align: center;">低</td>
+<td style="text-align: center;">低</td>
+<td>使用 pyxirr 库（与 Excel 算法一致）</td>
+</tr>
+<tr class="odd">
+<td>迁移期间 VBA 和 Python 数据不一致</td>
+<td style="text-align: center;">中</td>
+<td style="text-align: center;">中</td>
+<td>对比测试脚本，逐模块验证</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="迁移期间的共存策略" class="level2" data-number="11.2">
+<h2 data-number="11.2" class="anchored" data-anchor-id="迁移期间的共存策略"><span class="header-section-number">11.2</span> 迁移期间的共存策略</h2>
+<div class="cell" data-fig-width="100%" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-coexist" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-coexist-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-coexist">stateDiagram-v2
+    [*] --&gt; Phase1: 开始
+
+    state Phase1 {
+        VBA1: VBA 系统正常运行
+        PY1: Python 数据层开发中
+        VBA1 --&gt; PY1: 并行
+    }
+    note right of Phase1: VBA 仍是主系统\nPython 仅做数据验证
+
+    Phase1 --&gt; Phase2: 数据层完成
+
+    state Phase2 {
+        VBA2: VBA 前端仍在用
+        PY2: Python 后端提供数据
+        VBA2 --&gt; PY2: xlwings 桥接
+    }
+    note right of Phase2: Python 数据\n通过 xlwings 注入 Excel
+
+    Phase2 --&gt; Phase3: 业务层完成
+
+    state Phase3 {
+        CLI3: Python CLI 可独立使用
+        EXCEL3: Excel 通过 xlwings 调 Python
+        CLI3 --&gt; EXCEL3: 二者并行
+    }
+    note right of Phase3: 用户可选择\nCLI 或 Excel
+
+    Phase3 --&gt; Phase4: 表现层完成
+
+    state Phase4 {
+        FULL: Python 完全替代 VBA
+        LEGACY: VBA 代码归档保留
+    }
+    note right of Phase4: VBA 代码不再执行\n仅保留作参考
+
+    Phase4 --&gt; [*]
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-coexist-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;7: VBA + Python 渐进迁移策略
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="sec-appendix" class="level1" data-number="12">
+<h1 data-number="12"><span class="header-section-number">12</span> 附录</h1>
+<section id="a.-完整-vba-python-映射速查表" class="level2" data-number="12.1">
+<h2 data-number="12.1" class="anchored" data-anchor-id="a.-完整-vba-python-映射速查表"><span class="header-section-number">12.1</span> A. 完整 VBA → Python 映射速查表</h2>
+<div id="tbl-full-mapping" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-full-mapping-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;6: 完整 VBA → Python 映射速查表
+</figcaption>
+<div aria-describedby="tbl-full-mapping-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>VBA 函数</th>
+<th>Module</th>
+<th>Python 替代</th>
+<th style="text-align: center;">状态</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Macro1</code></td>
+<td>M1</td>
+<td><code>StockAnalyzer.analyze("TW")</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="even">
+<td><code>Macro2</code></td>
+<td>M2</td>
+<td><code>StockAnalyzer.analyze("US")</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="odd">
+<td><code>Macro3</code></td>
+<td>M3</td>
+<td><code>StockAnalyzer.analyze("HK")</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="even">
+<td><code>Macro4</code></td>
+<td>M4</td>
+<td><code>StockAnalyzer.analyze("CN")</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="odd">
+<td><code>Macro5</code></td>
+<td>M5</td>
+<td><code>StockAnalyzer.analyze("Global")</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="even">
+<td><code>ConnectXMLHTTP</code></td>
+<td>M2</td>
+<td><code>HttpClient.get()</code></td>
+<td style="text-align: center;">替代</td>
+</tr>
+<tr class="odd">
+<td><code>ConnectMarketWatch</code></td>
+<td>M2</td>
+<td><code>YFinanceProvider</code></td>
+<td style="text-align: center;">替代</td>
+</tr>
+<tr class="even">
+<td><code>ConnectWinHttp</code></td>
+<td>M2</td>
+<td><code>HttpClient.get()</code></td>
+<td style="text-align: center;">替代</td>
+</tr>
+<tr class="odd">
+<td><code>ConnectIE</code></td>
+<td>M2</td>
+<td>删除</td>
+<td style="text-align: center;">删除</td>
+</tr>
+<tr class="even">
+<td><code>Yahoo_Price_*</code> ×4</td>
+<td>M2~5</td>
+<td><code>YFinanceProvider.get_history()</code></td>
+<td style="text-align: center;">合并</td>
+</tr>
+<tr class="odd">
+<td><code>highlow</code></td>
+<td>M2</td>
+<td>不再需要（yfinance 自动调整）</td>
+<td style="text-align: center;">删除</td>
+</tr>
+<tr class="even">
+<td><code>unitconversion</code></td>
+<td>M2</td>
+<td>不再需要（yfinance 原始数值）</td>
+<td style="text-align: center;">删除</td>
+</tr>
+<tr class="odd">
+<td><code>splitt</code></td>
+<td>M2</td>
+<td>不再需要</td>
+<td style="text-align: center;">删除</td>
+</tr>
+<tr class="even">
+<td><code>HandleNulls</code></td>
+<td>M2</td>
+<td><code>pd.DataFrame.fillna()</code></td>
+<td style="text-align: center;">删除</td>
+</tr>
+<tr class="odd">
+<td><code>mkw</code>/<code>yho</code>/<code>wsj</code></td>
+<td>M2</td>
+<td>不再需要（统一 yfinance 格式）</td>
+<td style="text-align: center;">删除</td>
+</tr>
+<tr class="even">
+<td><code>yhondd</code></td>
+<td>M5</td>
+<td><code>EXCHANGE_SUFFIX</code> 字典</td>
+<td style="text-align: center;">简化</td>
+</tr>
+<tr class="odd">
+<td><code>TSECFSQT</code></td>
+<td>M1</td>
+<td><code>TWMarketProvider.query_tables()</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="even">
+<td><code>TWReport</code></td>
+<td>M1</td>
+<td><code>TWMarketProvider.get_report()</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="odd">
+<td><code>OTC</code></td>
+<td>M1</td>
+<td><code>TWMarketProvider.get_otc_monthly()</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="even">
+<td><code>Stocklist</code></td>
+<td>shared</td>
+<td><code>TWMarketProvider.get_stock_list()</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="odd">
+<td><code>findAll</code></td>
+<td>shared</td>
+<td><code>StockLookup.find()</code> + pandas</td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="even">
+<td><code>ProtectSheet</code></td>
+<td>shared</td>
+<td><code>ExcelIO.protect()</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="odd">
+<td><code>Macro10~14</code></td>
+<td>M6</td>
+<td><code>IndexScreener.screen(index=...)</code></td>
+<td style="text-align: center;">合并</td>
+</tr>
+<tr class="even">
+<td><code>Macro15~19</code></td>
+<td>M7</td>
+<td><code>PortfolioManager.save_stock(market=...)</code></td>
+<td style="text-align: center;">合并</td>
+</tr>
+<tr class="odd">
+<td><code>Macro20</code></td>
+<td>M7</td>
+<td><code>PortfolioManager.batch_update()</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="even">
+<td><code>Macro21~29</code></td>
+<td>M7</td>
+<td><code>PortfolioManager.sort_by(key=...)</code></td>
+<td style="text-align: center;">合并</td>
+</tr>
+<tr class="odd">
+<td><code>Macro30</code></td>
+<td>M8</td>
+<td><code>PerformanceTracker.calculate_all()</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="even">
+<td><code>pf</code>/<code>pfn</code></td>
+<td>M8</td>
+<td><code>PerformanceTracker.calculate_*()</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="odd">
+<td><code>cpbf</code></td>
+<td>M8</td>
+<td><code>PerformanceTracker.buffett_distance()</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="even">
+<td><code>tax</code>/<code>exdiv</code>/<code>taxtb</code></td>
+<td>M9</td>
+<td><code>TaxCalculator.*()</code></td>
+<td style="text-align: center;">改写</td>
+</tr>
+<tr class="odd">
+<td><code>CCRUMBT</code>/<code>DCSV</code></td>
+<td>M2</td>
+<td>删除（已废弃）</td>
+<td style="text-align: center;">删除</td>
+</tr>
+<tr class="even">
+<td><code>hkhis</code>/<code>cnhis</code>/<code>glhis</code></td>
+<td>M3~5</td>
+<td>删除（已废弃）</td>
+<td style="text-align: center;">删除</td>
+</tr>
+<tr class="odd">
+<td><code>Delete_Connection_*</code></td>
+<td>shared</td>
+<td>删除（Python 无此需求）</td>
+<td style="text-align: center;">删除</td>
+</tr>
+<tr class="even">
+<td><code>QueryTablesDelete</code></td>
+<td>ThisWB</td>
+<td>删除</td>
+<td style="text-align: center;">删除</td>
+</tr>
+<tr class="odd">
+<td><code>Delete_Pictures</code></td>
+<td>M7</td>
+<td>删除</td>
+<td style="text-align: center;">删除</td>
+</tr>
+<tr class="even">
+<td><code>JsonConverter.bas</code></td>
+<td>—</td>
+<td>删除（M8 副本）</td>
+<td style="text-align: center;">删除</td>
+</tr>
+<tr class="odd">
+<td><code>ERRLOG</code></td>
+<td>M1</td>
+<td><code>logging.error()</code></td>
+<td style="text-align: center;">替代</td>
+</tr>
+<tr class="even">
+<td><code>RSURLTYPE</code></td>
+<td>M1</td>
+<td><code>HttpClient</code> 内置负载均衡</td>
+<td style="text-align: center;">替代</td>
+</tr>
+<tr class="odd">
+<td><code>SEASONTF</code>/<code>YEARTF</code></td>
+<td>M1</td>
+<td><code>pd.to_datetime()</code></td>
+<td style="text-align: center;">替代</td>
+</tr>
+<tr class="even">
+<td><code>Auto_open</code>/<code>enEvt</code></td>
+<td>shared</td>
+<td>删除</td>
+<td style="text-align: center;">删除</td>
+</tr>
+<tr class="odd">
+<td><code>Macro8/9/35/36/40</code></td>
+<td>M1/M7/M8</td>
+<td>删除（视图缩放）</td>
+<td style="text-align: center;">删除</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section id="b.-相关分析报告索引" class="level2" data-number="12.2">
+<h2 data-number="12.2" class="anchored" data-anchor-id="b.-相关分析报告索引"><span class="header-section-number">12.2</span> B. 相关分析报告索引</h2>
+<p>本文档基于以下五份分析报告的发现：</p>
+<div id="tbl-reports" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-reports-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;7: 前序分析报告索引
+</figcaption>
+<div aria-describedby="tbl-reports-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 12%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 37%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: center;">#</th>
+<th>报告</th>
+<th>文件</th>
+<th>核心贡献</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: center;">1</td>
+<td>系统架构逆向分析</td>
+<td><code>architecture-report.qmd</code></td>
+<td>系统概览、Sheet-Module 映射、五层架构</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">2</td>
+<td>核心模块深度分析</td>
+<td><code>module-analysis.qmd</code></td>
+<td>90+ 函数清单、调用拓扑、依赖矩阵</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">3</td>
+<td>业务逻辑解读</td>
+<td><code>business-logic.qmd</code></td>
+<td>业务规则提取、估值模型、巴菲特距离</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">4</td>
+<td>数据流分析</td>
+<td><code>dataflow-analysis.qmd</code></td>
+<td>5 阶段管线、函数价值评估、可删除清单</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">5</td>
+<td>事件入口分析</td>
+<td><code>event-entry-analysis.qmd</code></td>
+<td>8 个事件处理器、启动序列、异常发现</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "已复制");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "已复制");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

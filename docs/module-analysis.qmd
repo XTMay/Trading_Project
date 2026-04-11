@@ -1,0 +1,934 @@
+---
+title: "核心模块深度分析报告"
+subtitle: "盈再表 VBA 系统 — 函数调用关系与职责分类"
+author: "Trading Project Team"
+date: today
+date-format: "YYYY-MM-DD"
+lang: zh
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "目录"
+    number-sections: true
+    code-fold: true
+    theme: cosmo
+    fontsize: "1rem"
+    mainfont: "PingFang SC, Microsoft YaHei, sans-serif"
+execute:
+  echo: false
+---
+
+# 全局调用关系总图 {#sec-global}
+
+## 系统级调用拓扑
+
+从事件入口到所有模块的完整第一层、第二层调用关系：
+
+```{mermaid}
+%%| label: fig-global-call
+%%| fig-cap: "系统级调用拓扑（事件层 → Module 层 → 工具层）"
+%%| fig-width: 100%
+graph TB
+    subgraph events["事件层"]
+        WO["Workbook_Open"]
+        AO["Auto_open"]
+        SC1["Sheet1.Change"]
+        SC2["Sheet2.Change"]
+        SC3["Sheet3.Change"]
+        SC4["Sheet4.Change"]
+        SC5["Sheet5.Change"]
+    end
+
+    subgraph m1["Module1 — 台股"]
+        Macro1["Macro1"]
+        TWReport["TWReport"]
+        OTC_sub["OTC"]
+        TSECFSQT_fn["TSECFSQT"]
+        TSECFSQTF_fn["TSECFSQTF"]
+        RSURLTYPE["RSURLTYPE"]
+        ERRLOG["ERRLOG"]
+        SEASONTF["SEASONTF"]
+        YEARTF["YEARTF"]
+    end
+
+    subgraph m2["Module2 — 美股"]
+        Macro2["Macro2"]
+        ConnXML["ConnectXMLHTTP"]
+        ConnMW["ConnectMarketWatch"]
+        ConnWH["ConnectWinHttp"]
+        ConnIE["ConnectIE"]
+        YPDS["Yahoo_Price_Div_Split"]
+        highlow_fn["highlow"]
+        unitconv["unitconversion"]
+        mkw_fn["mkw"]
+        wsj_fn["wsj"]
+        yho_fn["yho"]
+        DCSV_fn["DCSV"]
+        CCRUMBT_fn["CCRUMBT"]
+        splitt_fn["splitt"]
+        HandleNulls_fn["HandleNulls"]
+        ParseJson_fn["ParseJson"]
+    end
+
+    subgraph m3["Module3 — 港股"]
+        Macro3["Macro3"]
+        HK_YPDS["HK_Yahoo_Price_Div_Split"]
+    end
+
+    subgraph m4["Module4 — 中股"]
+        Macro4["Macro4"]
+        CN_YPDS["CN_Yahoo_Price_Div_Split"]
+    end
+
+    subgraph m5["Module5 — 全球"]
+        Macro5["Macro5"]
+        WW_YPDS["WW_Yahoo_Price_Div_Split"]
+        yhondd_fn["yhondd"]
+        GDPSCR_fn["GDPSCR"]
+        Macro6["Macro6"]
+    end
+
+    subgraph m6["Module6 — 选股"]
+        Macro10["Macro10"]
+        Macro11["Macro11"]
+        Macro12["Macro12"]
+        Macro13["Macro13"]
+        Macro14["Macro14"]
+        OTCC_fn["OTCC"]
+        fm6_fn["fm6"]
+    end
+
+    subgraph m7["Module7 — 收藏"]
+        M15_19["Macro15~19"]
+        Macro20["Macro20"]
+        Macro21["Macro21"]
+        lst_fn["lst"]
+        fm7_fn["fm7"]
+        addlink_fn["addlink"]
+        ak2k_fn["ak2k"]
+        w2k_fn["w2k"]
+        DelPic["Delete_Pictures"]
+    end
+
+    subgraph m8["Module8 — 绩效"]
+        Macro30["Macro30"]
+        pf_fn["pf"]
+        pfn_fn["pfn"]
+        cpbf_fn["cpbf"]
+        ddlet_fn["ddlet"]
+        fm8_fn["fm8"]
+    end
+
+    subgraph m9["Module9 — 税务"]
+        tax_fn["tax"]
+        exdiv_fn["exdiv"]
+        taxtb_fn["taxtb"]
+    end
+
+    subgraph shared["shared_modules — 工具"]
+        findAll_fn["findAll"]
+        Stocklist_fn["Stocklist"]
+        Protect_fn["ProtectSheet"]
+        Unprotect_fn["UnprotectSheet"]
+        DelConn["Delete_Connection_XL2003"]
+        QTDel["QueryTablesDelete"]
+        enEvt_fn["enEvt"]
+    end
+
+    %% Event → Module
+    WO --> DelConn
+    WO --> QTDel
+    AO -.->|"写 ZZ1"| SC1
+    SC1 --> findAll_fn --> Stocklist_fn
+    SC1 --> Macro1
+    SC2 --> Macro2
+    SC3 --> Macro3
+    SC4 --> Macro4
+    SC5 --> Macro5
+
+    %% Module1 internal
+    Macro1 --> RSURLTYPE
+    Macro1 --> TSECFSQT_fn
+    Macro1 --> TSECFSQTF_fn
+    Macro1 --> TWReport
+    Macro1 --> OTC_sub
+    Macro1 --> SEASONTF
+    Macro1 --> YEARTF
+    Macro1 --> ERRLOG
+
+    %% Module2 internal
+    Macro2 --> ConnXML
+    Macro2 --> ConnMW
+    Macro2 --> ConnWH
+    Macro2 --> YPDS
+    Macro2 --> highlow_fn
+    Macro2 --> unitconv
+    Macro2 --> mkw_fn
+    Macro2 --> wsj_fn
+    Macro2 --> yho_fn
+    Macro2 --> ParseJson_fn
+    YPDS --> HandleNulls_fn
+    YPDS --> ParseJson_fn
+    highlow_fn --> splitt_fn
+
+    %% Module3
+    Macro3 --> ConnMW
+    Macro3 --> ConnWH
+    Macro3 --> HK_YPDS
+    Macro3 --> highlow_fn
+
+    %% Module4
+    Macro4 --> ConnMW
+    Macro4 --> CN_YPDS
+    Macro4 --> highlow_fn
+
+    %% Module5
+    Macro5 --> ConnMW
+    Macro5 --> ConnXML
+    Macro5 --> ConnWH
+    Macro5 --> WW_YPDS
+    Macro5 --> yhondd_fn
+    Macro5 --> highlow_fn
+    Macro5 --> GDPSCR_fn
+
+    %% Module6
+    Macro10 --> OTCC_fn
+    Macro10 --> fm6_fn
+    Macro11 --> fm6_fn
+    Macro12 --> fm6_fn
+    Macro13 --> fm6_fn
+    Macro14 --> fm6_fn
+    OTCC_fn --> ConnXML
+
+    %% Module7
+    M15_19 --> lst_fn
+    lst_fn --> addlink_fn
+    lst_fn --> fm7_fn
+    Macro20 --> fm7_fn
+    Macro20 --> addlink_fn
+    Macro20 --> w2k_fn
+    Macro21 --> ConnMW
+    Macro21 --> w2k_fn
+    Macro21 --> addlink_fn
+    Macro21 --> fm7_fn
+
+    %% Module8
+    Macro30 --> pf_fn
+    Macro30 --> pfn_fn
+    pf_fn --> ddlet_fn
+    pf_fn --> cpbf_fn
+    pf_fn --> fm8_fn
+    pf_fn --> ConnMW
+    pf_fn --> ConnWH
+    pfn_fn --> ddlet_fn
+    pfn_fn --> cpbf_fn
+    pfn_fn --> fm8_fn
+
+    %% Module9
+    exdiv_fn --> TSECFSQT_fn
+    exdiv_fn --> taxtb_fn
+    tax_fn --> taxtb_fn
+
+    %% 所有 Macro 共用
+    Macro1 --> Unprotect_fn
+    Macro2 --> Unprotect_fn
+    Macro3 --> Unprotect_fn
+    Macro4 --> Unprotect_fn
+    Macro5 --> Unprotect_fn
+    Macro1 --> QTDel
+    Macro1 --> DelPic
+
+    SC1 --> Protect_fn
+    SC2 --> Protect_fn
+    SC3 --> Protect_fn
+    SC4 --> Protect_fn
+    SC5 --> Protect_fn
+
+    style events fill:#fff3e0,stroke:#f57c00
+    style shared fill:#f3e5f5,stroke:#7b1fa2
+    style m1 fill:#e8f5e9,stroke:#388e3c
+    style m2 fill:#e3f2fd,stroke:#1565c0
+    style m3 fill:#e3f2fd,stroke:#1565c0
+    style m4 fill:#e3f2fd,stroke:#1565c0
+    style m5 fill:#e3f2fd,stroke:#1565c0
+    style m6 fill:#fce4ec,stroke:#c62828
+    style m7 fill:#fff8e1,stroke:#f9a825
+    style m8 fill:#e0f2f1,stroke:#00695c
+    style m9 fill:#fbe9e7,stroke:#bf360c
+```
+
+
+# Module1 — 台股数据抓取 {#sec-m1}
+
+## 系统定位
+
+Module1 是**台股（TWSE/OTC）的完整数据抓取引擎**，也是整个系统中最复杂的数据模块（11 种数据源、14 个函数）。所有其他市场模块的架构均以此为模板。
+
+## 函数清单
+
+| 函数 | 类型 | 分类 | 说明 |
+|------|------|------|------|
+| `Macro1()` | Sub | **控制流程** | 主入口：编排 11 种数据抓取 |
+| `OTC(cd$, dc)` | Sub | 网络抓取 + Excel写入 | OTC 柜买市场月统计（POST） |
+| `OTC_BAK(cd$, dc)` | Sub | 网络抓取 + Excel写入 | OTC 备份方法（QueryTables） |
+| `TWReport(url, dc)` | Sub | 网络抓取 + 数据处理 | HTML 财报解析通用函数 |
+| `TSECFSQT(url, dtrange, wtable)` | Function | 网络抓取 + Excel写入 | QueryTables 网页查询封装 |
+| `TSECFSQTF(url, wformat, wseltype, poststr, dtrange, wtable)` | Function | 网络抓取 + Excel写入 | 扩展版 QueryTables（支持 POST） |
+| `ERRLOG(ST, EN)` | Function | **工具函数** | 错误日志追加到 V47 |
+| `RSURLTYPE()` | Function | **工具函数** | 随机选择 MoneyDJ 镜像域名 |
+| `SEASONTF(dc)` | Function | 数据处理 | 季度数据日期格式转换 |
+| `YEARTF(dc)` | Function | 数据处理 | 年度数据日期格式转换 |
+| `SEASONCU(dc)` | Function | 工具函数 | 检查季度数据是否超过 2 年 |
+| `YEARCU(dc)` | Function | 工具函数 | 检查年度数据是否超过 2 年 |
+| `Macro8()` | Sub | Excel写入 | 缩放视图到 A1:K16 |
+| `Macro9()` | Sub | Excel写入 | 缩放视图到 A1:R26 |
+
+: Module1 函数清单 {#tbl-m1-funcs}
+
+## 调用树
+
+```
+Macro1()                                    ← Sheet1.Worksheet_Change 调用
+├── UnprotectSheet(ActiveSheet)             ← shared_modules
+├── RSURLTYPE()                             → 返回随机 MoneyDJ 域名
+│
+├── [数据类型 1] 基本资料
+│   ├── TSECFSQT(url, Cells, "1")           → QueryTables 抓取
+│   └── ERRLOG(st, err)                     → 记录错误
+│
+├── [数据类型 2] 除息日资料
+│   ├── TSECFSQT(url, Cells, "1")
+│   └── ERRLOG(st, err)
+│
+├── [数据类型 3~4] 季度损益表（单体+合并）
+│   ├── TWReport(url, dc)                   → XMLHTTP + HTML DOM 解析
+│   └── SEASONTF(dc)                        → 日期格式转换
+│
+├── [数据类型 5~6] 季度资产负债表（单体+合并）
+│   ├── TWReport(url, dc)
+│   └── SEASONTF(dc)
+│
+├── [数据类型 7~8] 年度损益表（单体+合并）
+│   ├── TWReport(url, dc)
+│   └── YEARTF(dc)
+│
+├── [数据类型 9~10] 年度资产负债表（单体+合并）
+│   ├── TWReport(url, dc)
+│   └── YEARTF(dc)
+│
+├── [数据类型 11] 获利/代号/股东/转让/营收
+│   ├── TSECFSQT(url, Cells, "1")           ×5 次
+│   ├── TSECFSQTF(url, ..., Cells, "")      ×1 次
+│   └── ERRLOG(st, err)                     ×多次
+│
+├── [数据类型 12] 历史股价（TWSE）
+│   ├── TSECFSQT(url_twse, Cells, "1")
+│   └── TSECFSQT(url_tpex, Cells, "1")      → 上市/上柜分别查
+│
+├── OTC(cd$, dc)                             → OTC 月统计
+│   ├── CreateObject("MSXML2.XMLHTTP")       → POST 请求
+│   └── HTMLDocument.getElementsByTagName     → DOM 解析
+│
+├── QueryTablesDelete(ActiveSheet.Name)      ← shared_modules
+├── Delete_Pictures                          ← Module7
+└── [创建超链接]                              → Yahoo/MoneyDJ/GDP 等
+```
+
+## 数据源矩阵
+
+| # | 数据类型 | URL 域名 | 抓取方法 | 目标列 |
+|:-:|---------|----------|---------|--------|
+| 1 | 基本资料 | moneydj.com.tw | QueryTables | dc1 (75) |
+| 2 | 除息日 | moneydj.com.tw | QueryTables | dc1 |
+| 3 | 季度损益表 | moneydj.com.tw | XMLHTTP+DOM | dc1 |
+| 4 | 季度资产负债表 | moneydj.com.tw | XMLHTTP+DOM | dc1 |
+| 5 | 年度损益表 | moneydj.com.tw | XMLHTTP+DOM | dc1 |
+| 6 | 年度资产负债表 | moneydj.com.tw | XMLHTTP+DOM | dc1 |
+| 7 | 获利资料 | moneydj.com.tw | QueryTables | dc2 (32) |
+| 8 | 代号资料 | moneydj.com.tw | QueryTables | dc6 (87) |
+| 9 | 股东资料 | moneydj.com.tw | QueryTables | dc7 (98) |
+| 10 | 营收资料 | moneydj.com.tw | QueryTables | dc8 (103) |
+| 11 | 历史股价 | twse.com.tw | QueryTables | dc10 (120) |
+| 12 | OTC 月统计 | tpex.org.tw | XMLHTTP POST | dc11 (130) |
+
+: Module1 数据源矩阵 {#tbl-m1-data}
+
+
+# Module2 — 美股数据抓取 {#sec-m2}
+
+## 系统定位
+
+Module2 是**美股数据抓取引擎**，也是整个系统中**网络连接方式最多样**的模块。它同时定义了多个被其他模块复用的连接函数和工具函数。
+
+## 函数清单
+
+| 函数 | 类型 | 分类 | 说明 |
+|------|------|------|------|
+| `Macro2()` | Sub | **控制流程** | 主入口：编排美股数据抓取 |
+| `ConnectXMLHTTP(url)` | Sub | **网络抓取** | MSXML2.XMLHTTP 封装 |
+| `ConnectMarketWatch(url, dtrange, UrlNbr)` | Sub | **网络抓取** | QueryTables 封装 |
+| `ConnectWinHttp(url, waittime)` | Sub | **网络抓取** | WinHttp.WinHttpRequest 封装 |
+| `ConnectIE(url, waittime, myshow)` | Sub | **网络抓取** | Internet Explorer 自动化 |
+| `DelIE()` | Sub | 工具函数 | 强制关闭 IE 进程 |
+| `Yahoo_Price_Dividend_Split(cd$, dc)` | Sub | 网络抓取 + 数据处理 | Yahoo V8 API（JSON） |
+| `Yahoo_Price_Dividend_Split_20241111(cd$, dc)` | Sub | 网络抓取 + 数据处理 | Yahoo V7 CSV 下载版 |
+| `CCRUMBT(rng)` | Function | 网络抓取 | Yahoo crumb 令牌获取 |
+| `DCSV(url)` | Function | 网络抓取 | CSV 下载通用函数 |
+| `highlow(dc, c, t, b, pnd)` | Sub | **数据处理** | 历史高低价 + 拆股调整 |
+| `unitconversion(unitt)` | Function | 数据处理 | K/M/B/T 单位转换 |
+| `splitt(sp)` | Function | 数据处理 | 拆股比率解析 |
+| `mkw(cd$)` | Function | **工具函数** | 代号 → MarketWatch 格式 |
+| `yho(cd$)` | Function | **工具函数** | 代号 → Yahoo 格式 |
+| `wsj(cd$)` | Function | **工具函数** | 代号 → WSJ 格式 |
+| `HandleNulls(value)` | Function | 工具函数 | JSON null 值安全转换 |
+| `ParseJson(str)` | — | 外部依赖 | JSON 解析（来源待确认） |
+
+: Module2 函数清单 {#tbl-m2-funcs}
+
+::: {.callout-important}
+## Module2 是"公共连接库"
+`ConnectXMLHTTP`、`ConnectMarketWatch`、`ConnectWinHttp`、`ConnectIE`、`highlow`、`mkw`、`yho`、`wsj`、`unitconversion`、`splitt`、`DCSV`、`CCRUMBT` 均定义在 Module2 中，但被 Module3~5、Module6~8 广泛调用。
+**这是一个隐含的"公共库"，但没有独立为单独的 Module。**
+:::
+
+## 调用树
+
+```
+Macro2()                                    ← Sheet2.Worksheet_Change 调用
+├── UnprotectSheet(ActiveSheet)             ← shared_modules
+├── mkw([a2])                               → 代号格式化
+│
+├── [数据 1~2] 季度损益+资产负债表
+│   ├── ConnectMarketWatch(url, Cells, 2)   → QueryTables 抓取
+│   └── unitconversion(unitt)               → 单位转换
+│
+├── [数据 3~4] 年度损益+资产负债表
+│   ├── ConnectMarketWatch(url, Cells, 2)
+│   └── unitconversion(unitt)
+│
+├── [数据 5] 历史价格+股息+拆股
+│   ├── Yahoo_Price_Dividend_Split(cd$, dc) → Yahoo V8 JSON API
+│   │   ├── WinHttp.WinHttpRequest          → HTTP GET
+│   │   ├── ParseJson(response)             → JSON 解析
+│   │   └── HandleNulls(value)              → null 安全处理
+│   └── highlow(dc, c, t, b, pnd)           → 高低价调整
+│       └── splitt(sp)                      → 拆股比率解析
+│
+├── [数据 6] WSJ 季度/年度（备选）
+│   ├── wsj([a2])                           → WSJ 代号格式
+│   └── ConnectXMLHTTP(url)                 → XMLHTTP 抓取
+│
+├── [数据 7] SeekingAlpha/Xignite 历史
+│   ├── ConnectXMLHTTP(url)                 → 获取 token
+│   └── ParseJson(myjson)                   → 解析 JSON 响应
+│
+├── [数据 8] 公司概况 + 市值
+│   ├── ConnectMarketWatch(url, Cells, 2)
+│   └── ConnectWinHttp(url, 1)              → WinHttp 抓取
+│
+├── [数据 9] 汇率
+│   └── ConnectWinHttp(wise_url, 1)         → Wise.com 汇率
+│
+├── [数据 10] 现金流量表
+│   └── ConnectMarketWatch(url, Cells, 2)
+│
+├── QueryTablesDelete(ActiveSheet.Name)
+└── [创建超链接]                              → Yahoo/MarketWatch/Barron's
+```
+
+## HTTP 连接方式对照
+
+| 方法 | 封装函数 | COM 对象 | 特点 | macOS 兼容 |
+|------|---------|---------|------|:----------:|
+| QueryTables | `ConnectMarketWatch` | Excel 内建 | 最简单，自动写入 Range | 部分 |
+| XMLHTTP | `ConnectXMLHTTP` | `MSXML2.XMLHTTP` | 通用 GET，返回 HTMLDocument | **N** |
+| WinHttp | `ConnectWinHttp` | `WinHttp.WinHttpRequest.5.1` | 支持 TLS/代理 | **N** |
+| IE 自动化 | `ConnectIE` | `InternetExplorer.Application` | 可执行 JS 渲染 | **N** |
+| Yahoo V8 | `Yahoo_Price_Dividend_Split` | `WinHttp` + `ParseJson` | JSON API | **N** |
+
+: HTTP 连接方式 {#tbl-http-methods}
+
+
+# Module3 — 港股数据抓取 {#sec-m3}
+
+## 系统定位
+
+港股数据引擎，数据主要来源于 AAStocks。结构与 Module1 对齐。
+
+## 函数清单
+
+| 函数 | 类型 | 分类 | 说明 |
+|------|------|------|------|
+| `Macro3()` | Sub | **控制流程** | 主入口：编排港股数据抓取 |
+| `HK_Yahoo_Price_Dividend_Split(cd$, dc)` | Sub | 网络抓取 + 数据处理 | Yahoo CSV 历史数据 |
+| `hkhis()` | Sub (Private) | 网络抓取 | 已废弃（旧版 Yahoo 方法） |
+
+: Module3 函数清单 {#tbl-m3-funcs}
+
+## 调用树
+
+```
+Macro3()                                    ← Sheet3.Worksheet_Change 调用
+├── UnprotectSheet(ActiveSheet)             ← shared_modules
+│
+├── [数据 1] 季度损益表
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)   ← Module2
+├── [数据 2] 季度资产负债表
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)
+├── [数据 3] 年度损益表
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)
+├── [数据 4] 年度资产负债表
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)
+├── [数据 5] 股息历史
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)
+├── [数据 6] 基本资料
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)
+│
+├── [数据 7] 历史价格+股息+拆股
+│   ├── HK_Yahoo_Price_Dividend_Split(cd$, dc)
+│   │   └── MSXML2.XMLHTTP.3.0              → Yahoo CSV 下载
+│   └── highlow(dc, c, t, b, pnd)           ← Module2
+│
+├── [数据 8] 汇率
+│   └── ConnectWinHttp(wise_url, 1)          ← Module2
+│
+├── QueryTablesDelete / Delete_Pictures
+└── [创建超链接]                              → Yahoo/AAStocks/Google
+```
+
+
+# Module4 — 中股数据抓取 {#sec-m4}
+
+## 系统定位
+
+中国 A 股数据引擎，数据源为 Sina Finance + AAStocks。特殊之处在于需要循环抓取多年数据。
+
+## 函数清单
+
+| 函数 | 类型 | 分类 | 说明 |
+|------|------|------|------|
+| `Macro4()` | Sub | **控制流程** | 主入口：编排中股数据抓取 |
+| `CN_Yahoo_Price_Dividend_Split(cd$, ex$, dc)` | Sub | 网络抓取 + 数据处理 | Yahoo CSV（多一个交易所参数 ex$） |
+| `cnhis()` | Sub (Private) | 网络抓取 | 已废弃 |
+
+: Module4 函数清单 {#tbl-m4-funcs}
+
+## 调用树
+
+```
+Macro4()                                     ← Sheet4.Worksheet_Change 调用
+├── UnprotectSheet(ActiveSheet)
+│
+├── [数据 1] 5年季度损益表                     ← Sina Finance
+│   ├── QueryTables.Add(url_sina, Cells)      → 循环 5 年
+│   └── QueryTablesDelete / Delete_Pictures
+│
+├── [数据 2] 5年季度资产负债表                  ← Sina Finance
+│   ├── QueryTables.Add(url_sina, Cells)      → 循环 5 年
+│   └── QueryTablesDelete / Delete_Pictures
+│
+├── [数据 3] 基本资料
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)   ← Module2
+│
+├── [数据 4] 历史价格+股息+拆股
+│   ├── CN_Yahoo_Price_Dividend_Split(cd$, ex$, dc)
+│   │   └── MSXML2.XMLHTTP.3.0
+│   └── highlow(dc, c, t, b, pnd)            ← Module2
+│
+├── [数据 5] 股息/红股
+│   └── QueryTables.Add(url_sina, Cells)
+│
+├── [数据 6] 公司概况
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)
+│
+└── [创建超链接]                               → Yahoo/QQ/AAStocks
+```
+
+
+# Module5 — 全球数据抓取 {#sec-m5}
+
+## 系统定位
+
+全球市场数据引擎，支持 US/HK/CN/JP/UK/FR/CA/AU/KR 等市场。通过 WSJ 获取财报，需要做交易所代码映射。
+
+## 函数清单
+
+| 函数 | 类型 | 分类 | 说明 |
+|------|------|------|------|
+| `Macro5()` | Sub | **控制流程** | 主入口 |
+| `WW_Yahoo_Price_Dividend_Split(cd$, nd$, dc)` | Sub | 网络抓取 + 数据处理 | 通用 Yahoo CSV 下载 |
+| `yhondd(nd$, cd$)` | Sub | **工具函数** | 国家代码 → Yahoo 交易所代码映射 |
+| `GDPSCR(nd$, cd$)` | Sub | Excel写入 | 创建 GDP 等超链接 |
+| `Macro6()` | Sub | Excel写入 | GDP 链接更新 |
+| `yymmx(yw)` | Function | 工具函数 | 日期格式化 |
+| `CCRUMBT_BAK(rng)` | Function | 网络抓取 | Yahoo crumb（备份版） |
+| `DCSV_BAK(url)` | Function | 网络抓取 | CSV 下载（备份版） |
+| `glhis()` | Sub (Private) | 网络抓取 | 已废弃 |
+
+: Module5 函数清单 {#tbl-m5-funcs}
+
+## 交易所映射（yhondd）
+
+| 输入 nd$ | Yahoo 后缀 | 市场 |
+|---------|-----------|------|
+| JP | .T | 东京 |
+| UK | .L | 伦敦 |
+| HK | .HK | 香港 |
+| CN (6开头) | .SS | 上海 |
+| CN (非6) | .SZ | 深圳 |
+| AU | .AX | 澳洲 |
+| KR | .KS | 首尔 |
+| FR | .PA | 巴黎 |
+| CA | .TO | 多伦多 |
+| US / 其他 | (无后缀) | 美国 |
+
+
+# Module6 — 指数选股 {#sec-m6}
+
+## 系统定位
+
+独立的市场指数和选股筛选模块，抓取五大市场指数成分股数据。
+
+## 函数清单
+
+| 函数 | 类型 | 分类 | 说明 |
+|------|------|------|------|
+| `Macro10()` | Sub | 控制流程 + 网络抓取 | 台股加权指数 + OTC |
+| `OTCC()` | Sub | 网络抓取 + 数据处理 | OTC 成分股数据 |
+| `Macro11()` | Sub | 控制流程 + 网络抓取 | S&P 500（Finviz，26页） |
+| `Macro12()` | Sub | 控制流程 + 网络抓取 | 日经 225（IE 自动化） |
+| `Macro13()` | Sub | 控制流程 + 网络抓取 | 恒生指数（IE 自动化） |
+| `Macro14()` | Sub | 控制流程 + 网络抓取 | 沪深 180（QueryTables，9页） |
+| `fm6()` | Sub | **工具函数** | 格式化 + 清理临时数据 |
+| `stwid` / `stwpe` | Sub ×2 | 数据处理 | 台股按代号/PE 排序 |
+| `stwoid` / `stwope` | Sub ×2 | 数据处理 | OTC 按代号/PE 排序 |
+| `susid` / `suspe` | Sub ×2 | 数据处理 | 美股按代号/PE 排序 |
+| `sjpid` / `sjppe` | Sub ×2 | 数据处理 | 日股按代号/PE 排序 |
+| `shkid` / `shkpe` | Sub ×2 | 数据处理 | 港股按代号/PE 排序 |
+| `scnid` / `scnpe` | Sub ×2 | 数据处理 | 中股按代号/PE 排序 |
+
+: Module6 函数清单 {#tbl-m6-funcs}
+
+## 指数数据源
+
+| Macro | 指数 | 数据源 | 抓取方式 | 分页 |
+|-------|------|--------|---------|:----:|
+| Macro10 | 台股加权 + OTC | twse.com.tw / tpex.org.tw | QueryTables + XMLHTTP | N |
+| Macro11 | S&P 500 | finviz.com | QueryTables | 26 页 |
+| Macro12 | 日经 225 | investing.com | **IE 自动化** | N |
+| Macro13 | 恒生指数 | investing.com | **IE 自动化** | N |
+| Macro14 | 沪深 180 | aastocks.com | QueryTables | 9 页 |
+
+
+# Module7 — 投资组合管理 {#sec-m7}
+
+## 系统定位
+
+收藏管理中心，串联所有市场模块。负责保存/更新/排序/对比收藏股票。函数数量最多（24 个）。
+
+## 函数清单
+
+| 函数 | 类型 | 分类 | 说明 |
+|------|------|------|------|
+| `Macro15()` | Sub | 控制流程 + Excel写入 | 保存台股到收藏 |
+| `Macro16()` | Sub | 控制流程 + Excel写入 | 保存美股到收藏 |
+| `Macro17()` | Sub | 控制流程 + Excel写入 | 保存港股到收藏 |
+| `Macro18()` | Sub | 控制流程 + Excel写入 | 保存中股到收藏 |
+| `Macro19()` | Sub | 控制流程 + Excel写入 | 保存全球到收藏 |
+| `Macro20()` | Sub | **控制流程** | **批量更新所有收藏**（核心） |
+| `Macro21()` | Sub | 控制流程 + 网络抓取 | 更新收藏 + 抓取实时行情 |
+| `Macro22()` | Sub | 数据处理 | 排列计算 |
+| `Macro23()` | Sub | 控制流程 | 清空并重置收藏 |
+| `Macro24()` | Sub | 数据处理 | 按巴菲特距离排序 |
+| `Macro25()` | Sub | 数据处理 | 按预期回报排序 |
+| `Macro26()` | Sub | 数据处理 | 按自定义排序 |
+| `Macro27()` | Sub | 数据处理 + Excel写入 | 跨工作簿复制 |
+| `Macro28()` | Sub | 数据处理 | 按年度回报排序 |
+| `Macro29()` | Sub | 控制流程 | 从外部文件导入 |
+| `Macro40()` | Sub | 工具函数 | 窗口滚动重置 |
+| `Macro41()` | Sub | 数据处理 | 按年均回报排序 |
+| `lst()` | Sub | **数据处理 + Excel写入** | 列表管理核心 |
+| `fm7()` | Sub | **工具函数** | 收藏表格式化 |
+| `addlink()` | Sub | Excel写入 | 超链接批量添加 |
+| `Delete_Pictures()` | Sub | 工具函数 | 删除内嵌图片 |
+| `ak2k()` | Sub | 数据处理 | 数据列映射转换 |
+| `w2k(i)` | Sub | 数据处理 | 单行数据映射 |
+| `stat(i, ax)` | Sub (Private) | 数据处理 | 统计分类计数 |
+
+: Module7 函数清单 {#tbl-m7-funcs}
+
+## 核心调用树（Macro20 — 批量更新）
+
+```
+Macro20()                                    ← 手动触发
+├── UnprotectSheet(ActiveSheet)
+│
+├── for each 收藏行:                          → 遍历所有收藏的股票
+│   ├── 判断市场类型 (TW/US/HK/CN/Global)
+│   ├── 切换到对应市场 Sheet
+│   ├── 写入代号到 A2 → 触发 Macro1~5
+│   ├── Application.Wait(等待抓取完成)
+│   ├── 切换回收藏 Sheet
+│   ├── w2k(i)                               → 映射数据到收藏列
+│   └── addlink()                            → 添加超链接
+│
+├── fm7()                                     → 格式化收藏表
+├── ProtectSheet(ActiveSheet)
+└── Beep
+```
+
+
+# Module8 — 绩效追踪 {#sec-m8}
+
+## 系统定位
+
+投资绩效计算引擎，支持多个投资组合、多币种、XIRR 内部收益率计算，并与巴菲特 50 年 20% 复合增长进行对比。
+
+## 函数清单
+
+| 函数 | 类型 | 分类 | 说明 |
+|------|------|------|------|
+| `Macro30()` | Sub | **控制流程** | 主入口：遍历所有组合并计算 |
+| `pf(f)` | Sub | 控制流程 + 网络抓取 + 数据处理 | 单个组合绩效计算 |
+| `pfn(f)` | Sub | 数据处理 | 总组合汇总 |
+| `ddlet(f)` | Sub | 数据处理 | 删除标记为"X"的持仓 |
+| `cpbf(f)` | Sub | **数据处理** | 巴菲特距离计算 |
+| `fm8(f)` | Sub | 工具函数 | 绩效表格式化 |
+| `Macro35()` | Sub | 工具函数 | 缩放视图 |
+| `Macro36()` | Sub | 工具函数 | 缩放视图 |
+| `Macro37()` | Sub | 控制流程 | 从外部文件导入绩效 |
+
+: Module8 函数清单 {#tbl-m8-funcs}
+
+## 调用树
+
+```
+Macro30()                                    ← 手动触发
+├── UnprotectSheet(ActiveSheet)
+│
+├── for each 投资组合 (f):
+│   ├── pf(f)                                → 单组合绩效
+│   │   ├── ddlet(f)                         → 删除标X的行
+│   │   ├── ConnectMarketWatch(url, Cells)   → 抓取实时价格(?)
+│   │   ├── ConnectWinHttp(wise_url, 1)      → 汇率抓取
+│   │   ├── [XIRR 计算]                      → Excel XIRR 公式
+│   │   ├── cpbf(f)                          → 巴菲特距离
+│   │   │   └── 公式: 100 × (A^0.5 × B) / 3701
+│   │   └── fm8(f)                           → 格式化
+│   │
+│   └── pfn(f)                               → 总组合汇总
+│       ├── ddlet(f)
+│       ├── cpbf(f)
+│       └── fm8(f)
+│
+├── ProtectSheet(ActiveSheet)
+└── Application.Wait
+```
+
+
+# Module9 — 税务计算 {#sec-m9}
+
+## 系统定位
+
+台股专用的税务计算模块，处理除息税和补充保费（二代健保）。
+
+## 函数清单
+
+| 函数 | 类型 | 分类 | 说明 |
+|------|------|------|------|
+| `tax()` | Sub | 控制流程 | 打开外部税务文件并导入 |
+| `exdiv()` | Sub | 控制流程 + 网络抓取 + 数据处理 | 除息日/税额计算主逻辑 |
+| `taxtb()` | Sub | **数据处理 + Excel写入** | 税率表生成与公式填充 |
+
+: Module9 函数清单 {#tbl-m9-funcs}
+
+## 调用树
+
+```
+tax()                                        ← 手动触发
+├── UnprotectSheet(ActiveSheet)
+├── Application.GetOpenFilename()            → 打开外部工作簿
+├── 复制数据到当前表
+└── taxtb()                                  → 计算税率表
+
+exdiv()                                      ← 手动触发
+├── UnprotectSheet(ActiveSheet)
+│
+├── for each 持股:
+│   ├── TSECFSQT(url_moneydj, Cells, "1")   ← Module1
+│   │   → 抓取除息日期+金额
+│   ├── TSECFSQT(url_moneydj, Cells, "1")
+│   │   → 抓取现金股利
+│   ├── 计算股息税额
+│   ├── 判断: 股息 > 20,000 TWD → 补充保费 2.11%
+│   └── 处理 KY 公司（境外公司）特殊逻辑
+│
+├── taxtb()                                  → 计算税率表
+├── QueryTablesDelete / Delete_Pictures
+└── ProtectSheet
+```
+
+
+# shared_modules — 公共工具层 {#sec-shared}
+
+## 系统定位
+
+全局共享的基础设施层，提供类型定义、股票查找、代号下载、工作表保护等被所有模块依赖的功能。
+
+## 声明
+
+```vb
+Public theMarket As String          ' 当前市场
+Public theIndustry As String        ' 产业类别
+Public theMarketdate As String      ' 市场日期
+Public myWait As Boolean            ' 等待标志
+
+Public Type baseInfo
+    theCode As String               ' 股票代号
+    theName As String               ' 名称
+    Percent As Single               ' 比例
+End Type
+```
+
+## 函数清单
+
+| 函数 | 类型 | 分类 | 说明 |
+|------|------|------|------|
+| `findAll(theStr)` | Function | **数据处理** | 在股票数据库中查找 → 返回 baseInfo |
+| `Stocklist()` | Sub | **网络抓取 + 数据处理** | 从 TWSE 下载完整台股代号列表 |
+| `enEvt()` | Sub | 工具函数 | 重新启用 Application.EnableEvents |
+| `Delete_Connection_XL2007()` | Sub | 工具函数 | 删除 XL2007 连接 |
+| `Delete_Connection_XL2007_2()` | Sub | 工具函数 | 删除 XL2007 连接（备选） |
+| `Delete_Connection_XL2003()` | Sub | 工具函数 | 删除 XL2003 QueryTables |
+| `Delete_Connection_XL2003_2()` | Sub | 工具函数 | 删除当前 Sheet QueryTables |
+| `ProtectSheet(mysheet)` | Sub | **工具函数** | 锁定工作表（按 Sheet 名称解锁不同区域） |
+| `UnprotectSheet(mysheet)` | Sub | **工具函数** | 解锁工作表 |
+| `Auto_open()` | Sub | 控制流程 | 启动时写入 ZZ1 标记 |
+
+: shared_modules 函数清单 {#tbl-shared-funcs}
+
+
+# 模块间依赖矩阵 {#sec-deps}
+
+行 = 调用方，列 = 被调用方。数字 = 调用的函数数量。
+
+| 调用方 ↓ / 被调用方 → | shared | Module1 | Module2 | Module3 | Module4 | Module5 | Module6 | Module7 |
+|----------------------|:------:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|
+| **Module1** | 3 | — | | | | | | 1 |
+| **Module2** | 2 | | — | | | | | |
+| **Module3** | 2 | | 4 | — | | | | |
+| **Module4** | 2 | | 3 | | — | | | |
+| **Module5** | 2 | | 5 | | | — | | |
+| **Module6** | 1 | | 2 | | | | — | |
+| **Module7** | 2 | 1 | 4 | 1 | 1 | 1 | | — |
+| **Module8** | 1 | | 2 | | | | | |
+| **Module9** | 2 | 1 | | | | | | 1 |
+
+: 模块间调用依赖矩阵 {#tbl-deps}
+
+::: {.callout-tip}
+## 依赖关键发现
+- **Module2 是隐含的公共库**：定义了 6 个网络函数 + 6 个工具函数，被 Module3~9 广泛调用
+- **shared_modules 被所有模块依赖**：`UnprotectSheet` / `ProtectSheet` 是必调函数
+- **Module7 依赖最广**：唯一同时调用 Module1~5 全部市场模块的模块（通过 Macro20 批量更新）
+- **Module1 和 Module9 存在耦合**：Module9.exdiv 调用 Module1.TSECFSQT
+:::
+
+
+# 函数职责分类汇总 {#sec-classification}
+
+## 按分类统计
+
+```{mermaid}
+%%| label: fig-classification
+%%| fig-cap: "全系统函数职责分类分布"
+pie title 函数职责分类（共 ~90 个函数）
+    "控制流程" : 25
+    "网络抓取" : 18
+    "数据处理" : 22
+    "Excel写入" : 15
+    "工具函数" : 20
+```
+
+## 跨模块工具函数一览
+
+以下函数定义在某个 Module 中，但被多个模块调用，实质上是"公共函数"：
+
+| 函数 | 定义位置 | 被调用位置 | 建议归属 |
+|------|---------|-----------|---------|
+| `ConnectXMLHTTP` | Module2 | M2, M5, M6 | → shared_modules |
+| `ConnectMarketWatch` | Module2 | M2, M3, M4, M5, M6, M7, M8 | → shared_modules |
+| `ConnectWinHttp` | Module2 | M2, M3, M5, M8 | → shared_modules |
+| `ConnectIE` | Module2 | M6 (Macro12, 13) | → shared_modules |
+| `highlow` | Module2 | M2, M3, M4, M5 | → shared_modules |
+| `mkw` | Module2 | M2, M5, M7 | → shared_modules |
+| `yho` | Module2 | M2, M5 | → shared_modules |
+| `wsj` | Module2 | M2, M5 | → shared_modules |
+| `unitconversion` | Module2 | M2, M5 | → shared_modules |
+| `splitt` | Module2 | M2 (via highlow) | → shared_modules |
+| `DCSV` | Module2 | M3, M4, M5 (废弃) | → shared_modules |
+| `CCRUMBT` | Module2 | M3, M4, M5 (废弃) | → shared_modules |
+| `Delete_Pictures` | Module7 | M1, M3, M4, M5, M9 | → shared_modules |
+| `TSECFSQT` | Module1 | M1, M9 | → shared_modules |
+
+: 跨模块公共函数清单 {#tbl-cross-module}
+
+::: {.callout-warning}
+## 重构建议
+上述 14 个函数实质为公共基础设施，应从 Module1/Module2/Module7 中抽离，集中到 `shared_modules` 或新建的 `network_utils` 模块中。当前分散在各业务模块中，增加了维护难度和潜在的命名冲突风险。
+:::
+
+
+# 各模块在系统中的角色总结 {#sec-summary}
+
+| Module | 角色 | 函数数 | 对外暴露 | 核心入口 | 依赖 |
+|--------|------|:------:|---------|---------|------|
+| **shared_modules** | 公共基础设施 | 10 | 全部 | Auto_open | — |
+| **Module1** | 台股数据引擎 | 14 | Macro1, TSECFSQT | Macro1 | shared |
+| **Module2** | 美股引擎 + **隐含公共连接库** | 18 | 几乎全部 | Macro2 | shared |
+| **Module3** | 港股数据引擎 | 3 | Macro3 | Macro3 | shared, M2 |
+| **Module4** | 中股数据引擎 | 3 | Macro4 | Macro4 | shared, M2 |
+| **Module5** | 全球数据引擎 | 9 | Macro5, Macro6, yhondd | Macro5 | shared, M2 |
+| **Module6** | 指数选股 | 19 | Macro10~14, 排序 | Macro10~14 | shared, M2 |
+| **Module7** | 投资组合管理 | 24 | Macro15~29, Delete_Pictures | Macro20 | shared, M1~5 |
+| **Module8** | 绩效追踪 | 9 | Macro30 | Macro30 | shared, M2 |
+| **Module9** | 税务计算 | 3 | tax, exdiv | exdiv | shared, M1, M7 |
+
+: 模块角色总结 {#tbl-summary}
+
+```{mermaid}
+%%| label: fig-module-roles
+%%| fig-cap: "模块角色与数据流"
+flowchart LR
+    subgraph infra["基础设施"]
+        SM["shared_modules<br/>保护/查找/连接清理"]
+        M2U["Module2 内工具函数<br/>Connect*/mkw/yho/wsj<br/>highlow/unitconv"]
+    end
+
+    subgraph engines["数据引擎"]
+        M1["Module1<br/>台股"]
+        M2E["Module2<br/>美股"]
+        M3["Module3<br/>港股"]
+        M4["Module4<br/>中股"]
+        M5["Module5<br/>全球"]
+    end
+
+    subgraph biz["业务层"]
+        M6["Module6<br/>指数选股"]
+        M7["Module7<br/>组合管理"]
+        M8["Module8<br/>绩效"]
+        M9["Module9<br/>税务"]
+    end
+
+    SM --> M1 & M2E & M3 & M4 & M5 & M6 & M7 & M8 & M9
+    M2U --> M3 & M4 & M5 & M6 & M7 & M8
+
+    M1 & M2E & M3 & M4 & M5 --> M7
+    M7 --> M8
+    M1 --> M9
+
+    style infra fill:#f3e5f5,stroke:#7b1fa2
+    style engines fill:#e8f5e9,stroke:#388e3c
+    style biz fill:#fff3e0,stroke:#f57c00
+```

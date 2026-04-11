@@ -1,0 +1,2864 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-Hans" xml:lang="zh-Hans"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.27">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Trading Project Team">
+<meta name="dcterms.date" content="2026-02-26">
+
+<title>核心模块深度分析报告</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="module-analysis_files/libs/clipboard/clipboard.min.js"></script>
+<script src="module-analysis_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="module-analysis_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="module-analysis_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="module-analysis_files/libs/quarto-html/popper.min.js"></script>
+<script src="module-analysis_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="module-analysis_files/libs/quarto-html/anchor.min.js"></script>
+<link href="module-analysis_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="module-analysis_files/libs/quarto-html/quarto-syntax-highlighting-ed96de9b727972fe78a7b5d16c58bf87.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="module-analysis_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="module-analysis_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="module-analysis_files/libs/bootstrap/bootstrap-790280a9dc14a0ef3629ebb49602f3d6.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="module-analysis_files/libs/quarto-diagram/mermaid.min.js"></script>
+<script src="module-analysis_files/libs/quarto-diagram/mermaid-init.js"></script>
+<link href="module-analysis_files/libs/quarto-diagram/mermaid.css" rel="stylesheet">
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">目录</h2>
+   
+  <ul>
+  <li><a href="#sec-global" id="toc-sec-global" class="nav-link active" data-scroll-target="#sec-global"><span class="header-section-number">1</span> 全局调用关系总图</a>
+  <ul class="collapse">
+  <li><a href="#系统级调用拓扑" id="toc-系统级调用拓扑" class="nav-link" data-scroll-target="#系统级调用拓扑"><span class="header-section-number">1.1</span> 系统级调用拓扑</a></li>
+  </ul></li>
+  <li><a href="#sec-m1" id="toc-sec-m1" class="nav-link" data-scroll-target="#sec-m1"><span class="header-section-number">2</span> Module1 — 台股数据抓取</a>
+  <ul class="collapse">
+  <li><a href="#系统定位" id="toc-系统定位" class="nav-link" data-scroll-target="#系统定位"><span class="header-section-number">2.1</span> 系统定位</a></li>
+  <li><a href="#函数清单" id="toc-函数清单" class="nav-link" data-scroll-target="#函数清单"><span class="header-section-number">2.2</span> 函数清单</a></li>
+  <li><a href="#调用树" id="toc-调用树" class="nav-link" data-scroll-target="#调用树"><span class="header-section-number">2.3</span> 调用树</a></li>
+  <li><a href="#数据源矩阵" id="toc-数据源矩阵" class="nav-link" data-scroll-target="#数据源矩阵"><span class="header-section-number">2.4</span> 数据源矩阵</a></li>
+  </ul></li>
+  <li><a href="#sec-m2" id="toc-sec-m2" class="nav-link" data-scroll-target="#sec-m2"><span class="header-section-number">3</span> Module2 — 美股数据抓取</a>
+  <ul class="collapse">
+  <li><a href="#系统定位-1" id="toc-系统定位-1" class="nav-link" data-scroll-target="#系统定位-1"><span class="header-section-number">3.1</span> 系统定位</a></li>
+  <li><a href="#函数清单-1" id="toc-函数清单-1" class="nav-link" data-scroll-target="#函数清单-1"><span class="header-section-number">3.2</span> 函数清单</a></li>
+  <li><a href="#调用树-1" id="toc-调用树-1" class="nav-link" data-scroll-target="#调用树-1"><span class="header-section-number">3.3</span> 调用树</a></li>
+  <li><a href="#http-连接方式对照" id="toc-http-连接方式对照" class="nav-link" data-scroll-target="#http-连接方式对照"><span class="header-section-number">3.4</span> HTTP 连接方式对照</a></li>
+  </ul></li>
+  <li><a href="#sec-m3" id="toc-sec-m3" class="nav-link" data-scroll-target="#sec-m3"><span class="header-section-number">4</span> Module3 — 港股数据抓取</a>
+  <ul class="collapse">
+  <li><a href="#系统定位-2" id="toc-系统定位-2" class="nav-link" data-scroll-target="#系统定位-2"><span class="header-section-number">4.1</span> 系统定位</a></li>
+  <li><a href="#函数清单-2" id="toc-函数清单-2" class="nav-link" data-scroll-target="#函数清单-2"><span class="header-section-number">4.2</span> 函数清单</a></li>
+  <li><a href="#调用树-2" id="toc-调用树-2" class="nav-link" data-scroll-target="#调用树-2"><span class="header-section-number">4.3</span> 调用树</a></li>
+  </ul></li>
+  <li><a href="#sec-m4" id="toc-sec-m4" class="nav-link" data-scroll-target="#sec-m4"><span class="header-section-number">5</span> Module4 — 中股数据抓取</a>
+  <ul class="collapse">
+  <li><a href="#系统定位-3" id="toc-系统定位-3" class="nav-link" data-scroll-target="#系统定位-3"><span class="header-section-number">5.1</span> 系统定位</a></li>
+  <li><a href="#函数清单-3" id="toc-函数清单-3" class="nav-link" data-scroll-target="#函数清单-3"><span class="header-section-number">5.2</span> 函数清单</a></li>
+  <li><a href="#调用树-3" id="toc-调用树-3" class="nav-link" data-scroll-target="#调用树-3"><span class="header-section-number">5.3</span> 调用树</a></li>
+  </ul></li>
+  <li><a href="#sec-m5" id="toc-sec-m5" class="nav-link" data-scroll-target="#sec-m5"><span class="header-section-number">6</span> Module5 — 全球数据抓取</a>
+  <ul class="collapse">
+  <li><a href="#系统定位-4" id="toc-系统定位-4" class="nav-link" data-scroll-target="#系统定位-4"><span class="header-section-number">6.1</span> 系统定位</a></li>
+  <li><a href="#函数清单-4" id="toc-函数清单-4" class="nav-link" data-scroll-target="#函数清单-4"><span class="header-section-number">6.2</span> 函数清单</a></li>
+  <li><a href="#交易所映射yhondd" id="toc-交易所映射yhondd" class="nav-link" data-scroll-target="#交易所映射yhondd"><span class="header-section-number">6.3</span> 交易所映射（yhondd）</a></li>
+  </ul></li>
+  <li><a href="#sec-m6" id="toc-sec-m6" class="nav-link" data-scroll-target="#sec-m6"><span class="header-section-number">7</span> Module6 — 指数选股</a>
+  <ul class="collapse">
+  <li><a href="#系统定位-5" id="toc-系统定位-5" class="nav-link" data-scroll-target="#系统定位-5"><span class="header-section-number">7.1</span> 系统定位</a></li>
+  <li><a href="#函数清单-5" id="toc-函数清单-5" class="nav-link" data-scroll-target="#函数清单-5"><span class="header-section-number">7.2</span> 函数清单</a></li>
+  <li><a href="#指数数据源" id="toc-指数数据源" class="nav-link" data-scroll-target="#指数数据源"><span class="header-section-number">7.3</span> 指数数据源</a></li>
+  </ul></li>
+  <li><a href="#sec-m7" id="toc-sec-m7" class="nav-link" data-scroll-target="#sec-m7"><span class="header-section-number">8</span> Module7 — 投资组合管理</a>
+  <ul class="collapse">
+  <li><a href="#系统定位-6" id="toc-系统定位-6" class="nav-link" data-scroll-target="#系统定位-6"><span class="header-section-number">8.1</span> 系统定位</a></li>
+  <li><a href="#函数清单-6" id="toc-函数清单-6" class="nav-link" data-scroll-target="#函数清单-6"><span class="header-section-number">8.2</span> 函数清单</a></li>
+  <li><a href="#核心调用树macro20-批量更新" id="toc-核心调用树macro20-批量更新" class="nav-link" data-scroll-target="#核心调用树macro20-批量更新"><span class="header-section-number">8.3</span> 核心调用树（Macro20 — 批量更新）</a></li>
+  </ul></li>
+  <li><a href="#sec-m8" id="toc-sec-m8" class="nav-link" data-scroll-target="#sec-m8"><span class="header-section-number">9</span> Module8 — 绩效追踪</a>
+  <ul class="collapse">
+  <li><a href="#系统定位-7" id="toc-系统定位-7" class="nav-link" data-scroll-target="#系统定位-7"><span class="header-section-number">9.1</span> 系统定位</a></li>
+  <li><a href="#函数清单-7" id="toc-函数清单-7" class="nav-link" data-scroll-target="#函数清单-7"><span class="header-section-number">9.2</span> 函数清单</a></li>
+  <li><a href="#调用树-4" id="toc-调用树-4" class="nav-link" data-scroll-target="#调用树-4"><span class="header-section-number">9.3</span> 调用树</a></li>
+  </ul></li>
+  <li><a href="#sec-m9" id="toc-sec-m9" class="nav-link" data-scroll-target="#sec-m9"><span class="header-section-number">10</span> Module9 — 税务计算</a>
+  <ul class="collapse">
+  <li><a href="#系统定位-8" id="toc-系统定位-8" class="nav-link" data-scroll-target="#系统定位-8"><span class="header-section-number">10.1</span> 系统定位</a></li>
+  <li><a href="#函数清单-8" id="toc-函数清单-8" class="nav-link" data-scroll-target="#函数清单-8"><span class="header-section-number">10.2</span> 函数清单</a></li>
+  <li><a href="#调用树-5" id="toc-调用树-5" class="nav-link" data-scroll-target="#调用树-5"><span class="header-section-number">10.3</span> 调用树</a></li>
+  </ul></li>
+  <li><a href="#sec-shared" id="toc-sec-shared" class="nav-link" data-scroll-target="#sec-shared"><span class="header-section-number">11</span> shared_modules — 公共工具层</a>
+  <ul class="collapse">
+  <li><a href="#系统定位-9" id="toc-系统定位-9" class="nav-link" data-scroll-target="#系统定位-9"><span class="header-section-number">11.1</span> 系统定位</a></li>
+  <li><a href="#声明" id="toc-声明" class="nav-link" data-scroll-target="#声明"><span class="header-section-number">11.2</span> 声明</a></li>
+  <li><a href="#函数清单-9" id="toc-函数清单-9" class="nav-link" data-scroll-target="#函数清单-9"><span class="header-section-number">11.3</span> 函数清单</a></li>
+  </ul></li>
+  <li><a href="#sec-deps" id="toc-sec-deps" class="nav-link" data-scroll-target="#sec-deps"><span class="header-section-number">12</span> 模块间依赖矩阵</a></li>
+  <li><a href="#sec-classification" id="toc-sec-classification" class="nav-link" data-scroll-target="#sec-classification"><span class="header-section-number">13</span> 函数职责分类汇总</a>
+  <ul class="collapse">
+  <li><a href="#按分类统计" id="toc-按分类统计" class="nav-link" data-scroll-target="#按分类统计"><span class="header-section-number">13.1</span> 按分类统计</a></li>
+  <li><a href="#跨模块工具函数一览" id="toc-跨模块工具函数一览" class="nav-link" data-scroll-target="#跨模块工具函数一览"><span class="header-section-number">13.2</span> 跨模块工具函数一览</a></li>
+  </ul></li>
+  <li><a href="#sec-summary" id="toc-sec-summary" class="nav-link" data-scroll-target="#sec-summary"><span class="header-section-number">14</span> 各模块在系统中的角色总结</a></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">核心模块深度分析报告</h1>
+<p class="subtitle lead">盈再表 VBA 系统 — 函数调用关系与职责分类</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">作者</div>
+    <div class="quarto-title-meta-contents">
+             <p>Trading Project Team </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">发布于</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">2026-02-26</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="sec-global" class="level1" data-number="1">
+<h1 data-number="1"><span class="header-section-number">1</span> 全局调用关系总图</h1>
+<section id="系统级调用拓扑" class="level2" data-number="1.1">
+<h2 data-number="1.1" class="anchored" data-anchor-id="系统级调用拓扑"><span class="header-section-number">1.1</span> 系统级调用拓扑</h2>
+<p>从事件入口到所有模块的完整第一层、第二层调用关系：</p>
+<div class="cell" data-fig-width="100%" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-global-call" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-global-call-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-global-call">graph TB
+    subgraph events["事件层"]
+        WO["Workbook_Open"]
+        AO["Auto_open"]
+        SC1["Sheet1.Change"]
+        SC2["Sheet2.Change"]
+        SC3["Sheet3.Change"]
+        SC4["Sheet4.Change"]
+        SC5["Sheet5.Change"]
+    end
+
+    subgraph m1["Module1 — 台股"]
+        Macro1["Macro1"]
+        TWReport["TWReport"]
+        OTC_sub["OTC"]
+        TSECFSQT_fn["TSECFSQT"]
+        TSECFSQTF_fn["TSECFSQTF"]
+        RSURLTYPE["RSURLTYPE"]
+        ERRLOG["ERRLOG"]
+        SEASONTF["SEASONTF"]
+        YEARTF["YEARTF"]
+    end
+
+    subgraph m2["Module2 — 美股"]
+        Macro2["Macro2"]
+        ConnXML["ConnectXMLHTTP"]
+        ConnMW["ConnectMarketWatch"]
+        ConnWH["ConnectWinHttp"]
+        ConnIE["ConnectIE"]
+        YPDS["Yahoo_Price_Div_Split"]
+        highlow_fn["highlow"]
+        unitconv["unitconversion"]
+        mkw_fn["mkw"]
+        wsj_fn["wsj"]
+        yho_fn["yho"]
+        DCSV_fn["DCSV"]
+        CCRUMBT_fn["CCRUMBT"]
+        splitt_fn["splitt"]
+        HandleNulls_fn["HandleNulls"]
+        ParseJson_fn["ParseJson"]
+    end
+
+    subgraph m3["Module3 — 港股"]
+        Macro3["Macro3"]
+        HK_YPDS["HK_Yahoo_Price_Div_Split"]
+    end
+
+    subgraph m4["Module4 — 中股"]
+        Macro4["Macro4"]
+        CN_YPDS["CN_Yahoo_Price_Div_Split"]
+    end
+
+    subgraph m5["Module5 — 全球"]
+        Macro5["Macro5"]
+        WW_YPDS["WW_Yahoo_Price_Div_Split"]
+        yhondd_fn["yhondd"]
+        GDPSCR_fn["GDPSCR"]
+        Macro6["Macro6"]
+    end
+
+    subgraph m6["Module6 — 选股"]
+        Macro10["Macro10"]
+        Macro11["Macro11"]
+        Macro12["Macro12"]
+        Macro13["Macro13"]
+        Macro14["Macro14"]
+        OTCC_fn["OTCC"]
+        fm6_fn["fm6"]
+    end
+
+    subgraph m7["Module7 — 收藏"]
+        M15_19["Macro15~19"]
+        Macro20["Macro20"]
+        Macro21["Macro21"]
+        lst_fn["lst"]
+        fm7_fn["fm7"]
+        addlink_fn["addlink"]
+        ak2k_fn["ak2k"]
+        w2k_fn["w2k"]
+        DelPic["Delete_Pictures"]
+    end
+
+    subgraph m8["Module8 — 绩效"]
+        Macro30["Macro30"]
+        pf_fn["pf"]
+        pfn_fn["pfn"]
+        cpbf_fn["cpbf"]
+        ddlet_fn["ddlet"]
+        fm8_fn["fm8"]
+    end
+
+    subgraph m9["Module9 — 税务"]
+        tax_fn["tax"]
+        exdiv_fn["exdiv"]
+        taxtb_fn["taxtb"]
+    end
+
+    subgraph shared["shared_modules — 工具"]
+        findAll_fn["findAll"]
+        Stocklist_fn["Stocklist"]
+        Protect_fn["ProtectSheet"]
+        Unprotect_fn["UnprotectSheet"]
+        DelConn["Delete_Connection_XL2003"]
+        QTDel["QueryTablesDelete"]
+        enEvt_fn["enEvt"]
+    end
+
+    %% Event → Module
+    WO --&gt; DelConn
+    WO --&gt; QTDel
+    AO -.-&gt;|"写 ZZ1"| SC1
+    SC1 --&gt; findAll_fn --&gt; Stocklist_fn
+    SC1 --&gt; Macro1
+    SC2 --&gt; Macro2
+    SC3 --&gt; Macro3
+    SC4 --&gt; Macro4
+    SC5 --&gt; Macro5
+
+    %% Module1 internal
+    Macro1 --&gt; RSURLTYPE
+    Macro1 --&gt; TSECFSQT_fn
+    Macro1 --&gt; TSECFSQTF_fn
+    Macro1 --&gt; TWReport
+    Macro1 --&gt; OTC_sub
+    Macro1 --&gt; SEASONTF
+    Macro1 --&gt; YEARTF
+    Macro1 --&gt; ERRLOG
+
+    %% Module2 internal
+    Macro2 --&gt; ConnXML
+    Macro2 --&gt; ConnMW
+    Macro2 --&gt; ConnWH
+    Macro2 --&gt; YPDS
+    Macro2 --&gt; highlow_fn
+    Macro2 --&gt; unitconv
+    Macro2 --&gt; mkw_fn
+    Macro2 --&gt; wsj_fn
+    Macro2 --&gt; yho_fn
+    Macro2 --&gt; ParseJson_fn
+    YPDS --&gt; HandleNulls_fn
+    YPDS --&gt; ParseJson_fn
+    highlow_fn --&gt; splitt_fn
+
+    %% Module3
+    Macro3 --&gt; ConnMW
+    Macro3 --&gt; ConnWH
+    Macro3 --&gt; HK_YPDS
+    Macro3 --&gt; highlow_fn
+
+    %% Module4
+    Macro4 --&gt; ConnMW
+    Macro4 --&gt; CN_YPDS
+    Macro4 --&gt; highlow_fn
+
+    %% Module5
+    Macro5 --&gt; ConnMW
+    Macro5 --&gt; ConnXML
+    Macro5 --&gt; ConnWH
+    Macro5 --&gt; WW_YPDS
+    Macro5 --&gt; yhondd_fn
+    Macro5 --&gt; highlow_fn
+    Macro5 --&gt; GDPSCR_fn
+
+    %% Module6
+    Macro10 --&gt; OTCC_fn
+    Macro10 --&gt; fm6_fn
+    Macro11 --&gt; fm6_fn
+    Macro12 --&gt; fm6_fn
+    Macro13 --&gt; fm6_fn
+    Macro14 --&gt; fm6_fn
+    OTCC_fn --&gt; ConnXML
+
+    %% Module7
+    M15_19 --&gt; lst_fn
+    lst_fn --&gt; addlink_fn
+    lst_fn --&gt; fm7_fn
+    Macro20 --&gt; fm7_fn
+    Macro20 --&gt; addlink_fn
+    Macro20 --&gt; w2k_fn
+    Macro21 --&gt; ConnMW
+    Macro21 --&gt; w2k_fn
+    Macro21 --&gt; addlink_fn
+    Macro21 --&gt; fm7_fn
+
+    %% Module8
+    Macro30 --&gt; pf_fn
+    Macro30 --&gt; pfn_fn
+    pf_fn --&gt; ddlet_fn
+    pf_fn --&gt; cpbf_fn
+    pf_fn --&gt; fm8_fn
+    pf_fn --&gt; ConnMW
+    pf_fn --&gt; ConnWH
+    pfn_fn --&gt; ddlet_fn
+    pfn_fn --&gt; cpbf_fn
+    pfn_fn --&gt; fm8_fn
+
+    %% Module9
+    exdiv_fn --&gt; TSECFSQT_fn
+    exdiv_fn --&gt; taxtb_fn
+    tax_fn --&gt; taxtb_fn
+
+    %% 所有 Macro 共用
+    Macro1 --&gt; Unprotect_fn
+    Macro2 --&gt; Unprotect_fn
+    Macro3 --&gt; Unprotect_fn
+    Macro4 --&gt; Unprotect_fn
+    Macro5 --&gt; Unprotect_fn
+    Macro1 --&gt; QTDel
+    Macro1 --&gt; DelPic
+
+    SC1 --&gt; Protect_fn
+    SC2 --&gt; Protect_fn
+    SC3 --&gt; Protect_fn
+    SC4 --&gt; Protect_fn
+    SC5 --&gt; Protect_fn
+
+    style events fill:#fff3e0,stroke:#f57c00
+    style shared fill:#f3e5f5,stroke:#7b1fa2
+    style m1 fill:#e8f5e9,stroke:#388e3c
+    style m2 fill:#e3f2fd,stroke:#1565c0
+    style m3 fill:#e3f2fd,stroke:#1565c0
+    style m4 fill:#e3f2fd,stroke:#1565c0
+    style m5 fill:#e3f2fd,stroke:#1565c0
+    style m6 fill:#fce4ec,stroke:#c62828
+    style m7 fill:#fff8e1,stroke:#f9a825
+    style m8 fill:#e0f2f1,stroke:#00695c
+    style m9 fill:#fbe9e7,stroke:#bf360c
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-global-call-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;1: 系统级调用拓扑（事件层 → Module 层 → 工具层）
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="sec-m1" class="level1" data-number="2">
+<h1 data-number="2"><span class="header-section-number">2</span> Module1 — 台股数据抓取</h1>
+<section id="系统定位" class="level2" data-number="2.1">
+<h2 data-number="2.1" class="anchored" data-anchor-id="系统定位"><span class="header-section-number">2.1</span> 系统定位</h2>
+<p>Module1 是<strong>台股（TWSE/OTC）的完整数据抓取引擎</strong>，也是整个系统中最复杂的数据模块（11 种数据源、14 个函数）。所有其他市场模块的架构均以此为模板。</p>
+</section>
+<section id="函数清单" class="level2" data-number="2.2">
+<h2 data-number="2.2" class="anchored" data-anchor-id="函数清单"><span class="header-section-number">2.2</span> 函数清单</h2>
+<div id="tbl-m1-funcs" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m1-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;1: Module1 函数清单
+</figcaption>
+<div aria-describedby="tbl-m1-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>类型</th>
+<th>分类</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Macro1()</code></td>
+<td>Sub</td>
+<td><strong>控制流程</strong></td>
+<td>主入口：编排 11 种数据抓取</td>
+</tr>
+<tr class="even">
+<td><code>OTC(cd$, dc)</code></td>
+<td>Sub</td>
+<td>网络抓取 + Excel写入</td>
+<td>OTC 柜买市场月统计（POST）</td>
+</tr>
+<tr class="odd">
+<td><code>OTC_BAK(cd$, dc)</code></td>
+<td>Sub</td>
+<td>网络抓取 + Excel写入</td>
+<td>OTC 备份方法（QueryTables）</td>
+</tr>
+<tr class="even">
+<td><code>TWReport(url, dc)</code></td>
+<td>Sub</td>
+<td>网络抓取 + 数据处理</td>
+<td>HTML 财报解析通用函数</td>
+</tr>
+<tr class="odd">
+<td><code>TSECFSQT(url, dtrange, wtable)</code></td>
+<td>Function</td>
+<td>网络抓取 + Excel写入</td>
+<td>QueryTables 网页查询封装</td>
+</tr>
+<tr class="even">
+<td><code>TSECFSQTF(url, wformat, wseltype, poststr, dtrange, wtable)</code></td>
+<td>Function</td>
+<td>网络抓取 + Excel写入</td>
+<td>扩展版 QueryTables（支持 POST）</td>
+</tr>
+<tr class="odd">
+<td><code>ERRLOG(ST, EN)</code></td>
+<td>Function</td>
+<td><strong>工具函数</strong></td>
+<td>错误日志追加到 V47</td>
+</tr>
+<tr class="even">
+<td><code>RSURLTYPE()</code></td>
+<td>Function</td>
+<td><strong>工具函数</strong></td>
+<td>随机选择 MoneyDJ 镜像域名</td>
+</tr>
+<tr class="odd">
+<td><code>SEASONTF(dc)</code></td>
+<td>Function</td>
+<td>数据处理</td>
+<td>季度数据日期格式转换</td>
+</tr>
+<tr class="even">
+<td><code>YEARTF(dc)</code></td>
+<td>Function</td>
+<td>数据处理</td>
+<td>年度数据日期格式转换</td>
+</tr>
+<tr class="odd">
+<td><code>SEASONCU(dc)</code></td>
+<td>Function</td>
+<td>工具函数</td>
+<td>检查季度数据是否超过 2 年</td>
+</tr>
+<tr class="even">
+<td><code>YEARCU(dc)</code></td>
+<td>Function</td>
+<td>工具函数</td>
+<td>检查年度数据是否超过 2 年</td>
+</tr>
+<tr class="odd">
+<td><code>Macro8()</code></td>
+<td>Sub</td>
+<td>Excel写入</td>
+<td>缩放视图到 A1:K16</td>
+</tr>
+<tr class="even">
+<td><code>Macro9()</code></td>
+<td>Sub</td>
+<td>Excel写入</td>
+<td>缩放视图到 A1:R26</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section id="调用树" class="level2" data-number="2.3">
+<h2 data-number="2.3" class="anchored" data-anchor-id="调用树"><span class="header-section-number">2.3</span> 调用树</h2>
+<pre><code>Macro1()                                    ← Sheet1.Worksheet_Change 调用
+├── UnprotectSheet(ActiveSheet)             ← shared_modules
+├── RSURLTYPE()                             → 返回随机 MoneyDJ 域名
+│
+├── [数据类型 1] 基本资料
+│   ├── TSECFSQT(url, Cells, "1")           → QueryTables 抓取
+│   └── ERRLOG(st, err)                     → 记录错误
+│
+├── [数据类型 2] 除息日资料
+│   ├── TSECFSQT(url, Cells, "1")
+│   └── ERRLOG(st, err)
+│
+├── [数据类型 3~4] 季度损益表（单体+合并）
+│   ├── TWReport(url, dc)                   → XMLHTTP + HTML DOM 解析
+│   └── SEASONTF(dc)                        → 日期格式转换
+│
+├── [数据类型 5~6] 季度资产负债表（单体+合并）
+│   ├── TWReport(url, dc)
+│   └── SEASONTF(dc)
+│
+├── [数据类型 7~8] 年度损益表（单体+合并）
+│   ├── TWReport(url, dc)
+│   └── YEARTF(dc)
+│
+├── [数据类型 9~10] 年度资产负债表（单体+合并）
+│   ├── TWReport(url, dc)
+│   └── YEARTF(dc)
+│
+├── [数据类型 11] 获利/代号/股东/转让/营收
+│   ├── TSECFSQT(url, Cells, "1")           ×5 次
+│   ├── TSECFSQTF(url, ..., Cells, "")      ×1 次
+│   └── ERRLOG(st, err)                     ×多次
+│
+├── [数据类型 12] 历史股价（TWSE）
+│   ├── TSECFSQT(url_twse, Cells, "1")
+│   └── TSECFSQT(url_tpex, Cells, "1")      → 上市/上柜分别查
+│
+├── OTC(cd$, dc)                             → OTC 月统计
+│   ├── CreateObject("MSXML2.XMLHTTP")       → POST 请求
+│   └── HTMLDocument.getElementsByTagName     → DOM 解析
+│
+├── QueryTablesDelete(ActiveSheet.Name)      ← shared_modules
+├── Delete_Pictures                          ← Module7
+└── [创建超链接]                              → Yahoo/MoneyDJ/GDP 等</code></pre>
+</section>
+<section id="数据源矩阵" class="level2" data-number="2.4">
+<h2 data-number="2.4" class="anchored" data-anchor-id="数据源矩阵"><span class="header-section-number">2.4</span> 数据源矩阵</h2>
+<div id="tbl-m1-data" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m1-data-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;2: Module1 数据源矩阵
+</figcaption>
+<div aria-describedby="tbl-m1-data-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th style="text-align: center;">#</th>
+<th>数据类型</th>
+<th>URL 域名</th>
+<th>抓取方法</th>
+<th>目标列</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: center;">1</td>
+<td>基本资料</td>
+<td>moneydj.com.tw</td>
+<td>QueryTables</td>
+<td>dc1 (75)</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">2</td>
+<td>除息日</td>
+<td>moneydj.com.tw</td>
+<td>QueryTables</td>
+<td>dc1</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">3</td>
+<td>季度损益表</td>
+<td>moneydj.com.tw</td>
+<td>XMLHTTP+DOM</td>
+<td>dc1</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">4</td>
+<td>季度资产负债表</td>
+<td>moneydj.com.tw</td>
+<td>XMLHTTP+DOM</td>
+<td>dc1</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">5</td>
+<td>年度损益表</td>
+<td>moneydj.com.tw</td>
+<td>XMLHTTP+DOM</td>
+<td>dc1</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">6</td>
+<td>年度资产负债表</td>
+<td>moneydj.com.tw</td>
+<td>XMLHTTP+DOM</td>
+<td>dc1</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">7</td>
+<td>获利资料</td>
+<td>moneydj.com.tw</td>
+<td>QueryTables</td>
+<td>dc2 (32)</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">8</td>
+<td>代号资料</td>
+<td>moneydj.com.tw</td>
+<td>QueryTables</td>
+<td>dc6 (87)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">9</td>
+<td>股东资料</td>
+<td>moneydj.com.tw</td>
+<td>QueryTables</td>
+<td>dc7 (98)</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">10</td>
+<td>营收资料</td>
+<td>moneydj.com.tw</td>
+<td>QueryTables</td>
+<td>dc8 (103)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: center;">11</td>
+<td>历史股价</td>
+<td>twse.com.tw</td>
+<td>QueryTables</td>
+<td>dc10 (120)</td>
+</tr>
+<tr class="even">
+<td style="text-align: center;">12</td>
+<td>OTC 月统计</td>
+<td>tpex.org.tw</td>
+<td>XMLHTTP POST</td>
+<td>dc11 (130)</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+</section>
+<section id="sec-m2" class="level1" data-number="3">
+<h1 data-number="3"><span class="header-section-number">3</span> Module2 — 美股数据抓取</h1>
+<section id="系统定位-1" class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="系统定位-1"><span class="header-section-number">3.1</span> 系统定位</h2>
+<p>Module2 是<strong>美股数据抓取引擎</strong>，也是整个系统中<strong>网络连接方式最多样</strong>的模块。它同时定义了多个被其他模块复用的连接函数和工具函数。</p>
+</section>
+<section id="函数清单-1" class="level2" data-number="3.2">
+<h2 data-number="3.2" class="anchored" data-anchor-id="函数清单-1"><span class="header-section-number">3.2</span> 函数清单</h2>
+<div id="tbl-m2-funcs" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m2-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;3: Module2 函数清单
+</figcaption>
+<div aria-describedby="tbl-m2-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>类型</th>
+<th>分类</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Macro2()</code></td>
+<td>Sub</td>
+<td><strong>控制流程</strong></td>
+<td>主入口：编排美股数据抓取</td>
+</tr>
+<tr class="even">
+<td><code>ConnectXMLHTTP(url)</code></td>
+<td>Sub</td>
+<td><strong>网络抓取</strong></td>
+<td>MSXML2.XMLHTTP 封装</td>
+</tr>
+<tr class="odd">
+<td><code>ConnectMarketWatch(url, dtrange, UrlNbr)</code></td>
+<td>Sub</td>
+<td><strong>网络抓取</strong></td>
+<td>QueryTables 封装</td>
+</tr>
+<tr class="even">
+<td><code>ConnectWinHttp(url, waittime)</code></td>
+<td>Sub</td>
+<td><strong>网络抓取</strong></td>
+<td>WinHttp.WinHttpRequest 封装</td>
+</tr>
+<tr class="odd">
+<td><code>ConnectIE(url, waittime, myshow)</code></td>
+<td>Sub</td>
+<td><strong>网络抓取</strong></td>
+<td>Internet Explorer 自动化</td>
+</tr>
+<tr class="even">
+<td><code>DelIE()</code></td>
+<td>Sub</td>
+<td>工具函数</td>
+<td>强制关闭 IE 进程</td>
+</tr>
+<tr class="odd">
+<td><code>Yahoo_Price_Dividend_Split(cd$, dc)</code></td>
+<td>Sub</td>
+<td>网络抓取 + 数据处理</td>
+<td>Yahoo V8 API（JSON）</td>
+</tr>
+<tr class="even">
+<td><code>Yahoo_Price_Dividend_Split_20241111(cd$, dc)</code></td>
+<td>Sub</td>
+<td>网络抓取 + 数据处理</td>
+<td>Yahoo V7 CSV 下载版</td>
+</tr>
+<tr class="odd">
+<td><code>CCRUMBT(rng)</code></td>
+<td>Function</td>
+<td>网络抓取</td>
+<td>Yahoo crumb 令牌获取</td>
+</tr>
+<tr class="even">
+<td><code>DCSV(url)</code></td>
+<td>Function</td>
+<td>网络抓取</td>
+<td>CSV 下载通用函数</td>
+</tr>
+<tr class="odd">
+<td><code>highlow(dc, c, t, b, pnd)</code></td>
+<td>Sub</td>
+<td><strong>数据处理</strong></td>
+<td>历史高低价 + 拆股调整</td>
+</tr>
+<tr class="even">
+<td><code>unitconversion(unitt)</code></td>
+<td>Function</td>
+<td>数据处理</td>
+<td>K/M/B/T 单位转换</td>
+</tr>
+<tr class="odd">
+<td><code>splitt(sp)</code></td>
+<td>Function</td>
+<td>数据处理</td>
+<td>拆股比率解析</td>
+</tr>
+<tr class="even">
+<td><code>mkw(cd$)</code></td>
+<td>Function</td>
+<td><strong>工具函数</strong></td>
+<td>代号 → MarketWatch 格式</td>
+</tr>
+<tr class="odd">
+<td><code>yho(cd$)</code></td>
+<td>Function</td>
+<td><strong>工具函数</strong></td>
+<td>代号 → Yahoo 格式</td>
+</tr>
+<tr class="even">
+<td><code>wsj(cd$)</code></td>
+<td>Function</td>
+<td><strong>工具函数</strong></td>
+<td>代号 → WSJ 格式</td>
+</tr>
+<tr class="odd">
+<td><code>HandleNulls(value)</code></td>
+<td>Function</td>
+<td>工具函数</td>
+<td>JSON null 值安全转换</td>
+</tr>
+<tr class="even">
+<td><code>ParseJson(str)</code></td>
+<td>—</td>
+<td>外部依赖</td>
+<td>JSON 解析（来源待确认）</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="callout callout-style-default callout-important callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">重要</span>Module2 是”公共连接库”
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><code>ConnectXMLHTTP</code>、<code>ConnectMarketWatch</code>、<code>ConnectWinHttp</code>、<code>ConnectIE</code>、<code>highlow</code>、<code>mkw</code>、<code>yho</code>、<code>wsj</code>、<code>unitconversion</code>、<code>splitt</code>、<code>DCSV</code>、<code>CCRUMBT</code> 均定义在 Module2 中，但被 Module3<sub>5、Module6</sub>8 广泛调用。 <strong>这是一个隐含的”公共库”，但没有独立为单独的 Module。</strong></p>
+</div>
+</div>
+</section>
+<section id="调用树-1" class="level2" data-number="3.3">
+<h2 data-number="3.3" class="anchored" data-anchor-id="调用树-1"><span class="header-section-number">3.3</span> 调用树</h2>
+<pre><code>Macro2()                                    ← Sheet2.Worksheet_Change 调用
+├── UnprotectSheet(ActiveSheet)             ← shared_modules
+├── mkw([a2])                               → 代号格式化
+│
+├── [数据 1~2] 季度损益+资产负债表
+│   ├── ConnectMarketWatch(url, Cells, 2)   → QueryTables 抓取
+│   └── unitconversion(unitt)               → 单位转换
+│
+├── [数据 3~4] 年度损益+资产负债表
+│   ├── ConnectMarketWatch(url, Cells, 2)
+│   └── unitconversion(unitt)
+│
+├── [数据 5] 历史价格+股息+拆股
+│   ├── Yahoo_Price_Dividend_Split(cd$, dc) → Yahoo V8 JSON API
+│   │   ├── WinHttp.WinHttpRequest          → HTTP GET
+│   │   ├── ParseJson(response)             → JSON 解析
+│   │   └── HandleNulls(value)              → null 安全处理
+│   └── highlow(dc, c, t, b, pnd)           → 高低价调整
+│       └── splitt(sp)                      → 拆股比率解析
+│
+├── [数据 6] WSJ 季度/年度（备选）
+│   ├── wsj([a2])                           → WSJ 代号格式
+│   └── ConnectXMLHTTP(url)                 → XMLHTTP 抓取
+│
+├── [数据 7] SeekingAlpha/Xignite 历史
+│   ├── ConnectXMLHTTP(url)                 → 获取 token
+│   └── ParseJson(myjson)                   → 解析 JSON 响应
+│
+├── [数据 8] 公司概况 + 市值
+│   ├── ConnectMarketWatch(url, Cells, 2)
+│   └── ConnectWinHttp(url, 1)              → WinHttp 抓取
+│
+├── [数据 9] 汇率
+│   └── ConnectWinHttp(wise_url, 1)         → Wise.com 汇率
+│
+├── [数据 10] 现金流量表
+│   └── ConnectMarketWatch(url, Cells, 2)
+│
+├── QueryTablesDelete(ActiveSheet.Name)
+└── [创建超链接]                              → Yahoo/MarketWatch/Barron's</code></pre>
+</section>
+<section id="http-连接方式对照" class="level2" data-number="3.4">
+<h2 data-number="3.4" class="anchored" data-anchor-id="http-连接方式对照"><span class="header-section-number">3.4</span> HTTP 连接方式对照</h2>
+<div id="tbl-http-methods" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-http-methods-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;4: HTTP 连接方式
+</figcaption>
+<div aria-describedby="tbl-http-methods-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 14%">
+<col style="width: 21%">
+<col style="width: 21%">
+<col style="width: 14%">
+<col style="width: 28%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>方法</th>
+<th>封装函数</th>
+<th>COM 对象</th>
+<th>特点</th>
+<th style="text-align: center;">macOS 兼容</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>QueryTables</td>
+<td><code>ConnectMarketWatch</code></td>
+<td>Excel 内建</td>
+<td>最简单，自动写入 Range</td>
+<td style="text-align: center;">部分</td>
+</tr>
+<tr class="even">
+<td>XMLHTTP</td>
+<td><code>ConnectXMLHTTP</code></td>
+<td><code>MSXML2.XMLHTTP</code></td>
+<td>通用 GET，返回 HTMLDocument</td>
+<td style="text-align: center;"><strong>N</strong></td>
+</tr>
+<tr class="odd">
+<td>WinHttp</td>
+<td><code>ConnectWinHttp</code></td>
+<td><code>WinHttp.WinHttpRequest.5.1</code></td>
+<td>支持 TLS/代理</td>
+<td style="text-align: center;"><strong>N</strong></td>
+</tr>
+<tr class="even">
+<td>IE 自动化</td>
+<td><code>ConnectIE</code></td>
+<td><code>InternetExplorer.Application</code></td>
+<td>可执行 JS 渲染</td>
+<td style="text-align: center;"><strong>N</strong></td>
+</tr>
+<tr class="odd">
+<td>Yahoo V8</td>
+<td><code>Yahoo_Price_Dividend_Split</code></td>
+<td><code>WinHttp</code> + <code>ParseJson</code></td>
+<td>JSON API</td>
+<td style="text-align: center;"><strong>N</strong></td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+</section>
+<section id="sec-m3" class="level1" data-number="4">
+<h1 data-number="4"><span class="header-section-number">4</span> Module3 — 港股数据抓取</h1>
+<section id="系统定位-2" class="level2" data-number="4.1">
+<h2 data-number="4.1" class="anchored" data-anchor-id="系统定位-2"><span class="header-section-number">4.1</span> 系统定位</h2>
+<p>港股数据引擎，数据主要来源于 AAStocks。结构与 Module1 对齐。</p>
+</section>
+<section id="函数清单-2" class="level2" data-number="4.2">
+<h2 data-number="4.2" class="anchored" data-anchor-id="函数清单-2"><span class="header-section-number">4.2</span> 函数清单</h2>
+<div id="tbl-m3-funcs" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m3-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;5: Module3 函数清单
+</figcaption>
+<div aria-describedby="tbl-m3-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>类型</th>
+<th>分类</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Macro3()</code></td>
+<td>Sub</td>
+<td><strong>控制流程</strong></td>
+<td>主入口：编排港股数据抓取</td>
+</tr>
+<tr class="even">
+<td><code>HK_Yahoo_Price_Dividend_Split(cd$, dc)</code></td>
+<td>Sub</td>
+<td>网络抓取 + 数据处理</td>
+<td>Yahoo CSV 历史数据</td>
+</tr>
+<tr class="odd">
+<td><code>hkhis()</code></td>
+<td>Sub (Private)</td>
+<td>网络抓取</td>
+<td>已废弃（旧版 Yahoo 方法）</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section id="调用树-2" class="level2" data-number="4.3">
+<h2 data-number="4.3" class="anchored" data-anchor-id="调用树-2"><span class="header-section-number">4.3</span> 调用树</h2>
+<pre><code>Macro3()                                    ← Sheet3.Worksheet_Change 调用
+├── UnprotectSheet(ActiveSheet)             ← shared_modules
+│
+├── [数据 1] 季度损益表
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)   ← Module2
+├── [数据 2] 季度资产负债表
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)
+├── [数据 3] 年度损益表
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)
+├── [数据 4] 年度资产负债表
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)
+├── [数据 5] 股息历史
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)
+├── [数据 6] 基本资料
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)
+│
+├── [数据 7] 历史价格+股息+拆股
+│   ├── HK_Yahoo_Price_Dividend_Split(cd$, dc)
+│   │   └── MSXML2.XMLHTTP.3.0              → Yahoo CSV 下载
+│   └── highlow(dc, c, t, b, pnd)           ← Module2
+│
+├── [数据 8] 汇率
+│   └── ConnectWinHttp(wise_url, 1)          ← Module2
+│
+├── QueryTablesDelete / Delete_Pictures
+└── [创建超链接]                              → Yahoo/AAStocks/Google</code></pre>
+</section>
+</section>
+<section id="sec-m4" class="level1" data-number="5">
+<h1 data-number="5"><span class="header-section-number">5</span> Module4 — 中股数据抓取</h1>
+<section id="系统定位-3" class="level2" data-number="5.1">
+<h2 data-number="5.1" class="anchored" data-anchor-id="系统定位-3"><span class="header-section-number">5.1</span> 系统定位</h2>
+<p>中国 A 股数据引擎，数据源为 Sina Finance + AAStocks。特殊之处在于需要循环抓取多年数据。</p>
+</section>
+<section id="函数清单-3" class="level2" data-number="5.2">
+<h2 data-number="5.2" class="anchored" data-anchor-id="函数清单-3"><span class="header-section-number">5.2</span> 函数清单</h2>
+<div id="tbl-m4-funcs" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m4-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;6: Module4 函数清单
+</figcaption>
+<div aria-describedby="tbl-m4-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>类型</th>
+<th>分类</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Macro4()</code></td>
+<td>Sub</td>
+<td><strong>控制流程</strong></td>
+<td>主入口：编排中股数据抓取</td>
+</tr>
+<tr class="even">
+<td><code>CN_Yahoo_Price_Dividend_Split(cd$, ex$, dc)</code></td>
+<td>Sub</td>
+<td>网络抓取 + 数据处理</td>
+<td>Yahoo CSV（多一个交易所参数 ex$）</td>
+</tr>
+<tr class="odd">
+<td><code>cnhis()</code></td>
+<td>Sub (Private)</td>
+<td>网络抓取</td>
+<td>已废弃</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section id="调用树-3" class="level2" data-number="5.3">
+<h2 data-number="5.3" class="anchored" data-anchor-id="调用树-3"><span class="header-section-number">5.3</span> 调用树</h2>
+<pre><code>Macro4()                                     ← Sheet4.Worksheet_Change 调用
+├── UnprotectSheet(ActiveSheet)
+│
+├── [数据 1] 5年季度损益表                     ← Sina Finance
+│   ├── QueryTables.Add(url_sina, Cells)      → 循环 5 年
+│   └── QueryTablesDelete / Delete_Pictures
+│
+├── [数据 2] 5年季度资产负债表                  ← Sina Finance
+│   ├── QueryTables.Add(url_sina, Cells)      → 循环 5 年
+│   └── QueryTablesDelete / Delete_Pictures
+│
+├── [数据 3] 基本资料
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)   ← Module2
+│
+├── [数据 4] 历史价格+股息+拆股
+│   ├── CN_Yahoo_Price_Dividend_Split(cd$, ex$, dc)
+│   │   └── MSXML2.XMLHTTP.3.0
+│   └── highlow(dc, c, t, b, pnd)            ← Module2
+│
+├── [数据 5] 股息/红股
+│   └── QueryTables.Add(url_sina, Cells)
+│
+├── [数据 6] 公司概况
+│   └── ConnectMarketWatch(url_aastocks, Cells, 5)
+│
+└── [创建超链接]                               → Yahoo/QQ/AAStocks</code></pre>
+</section>
+</section>
+<section id="sec-m5" class="level1" data-number="6">
+<h1 data-number="6"><span class="header-section-number">6</span> Module5 — 全球数据抓取</h1>
+<section id="系统定位-4" class="level2" data-number="6.1">
+<h2 data-number="6.1" class="anchored" data-anchor-id="系统定位-4"><span class="header-section-number">6.1</span> 系统定位</h2>
+<p>全球市场数据引擎，支持 US/HK/CN/JP/UK/FR/CA/AU/KR 等市场。通过 WSJ 获取财报，需要做交易所代码映射。</p>
+</section>
+<section id="函数清单-4" class="level2" data-number="6.2">
+<h2 data-number="6.2" class="anchored" data-anchor-id="函数清单-4"><span class="header-section-number">6.2</span> 函数清单</h2>
+<div id="tbl-m5-funcs" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m5-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;7: Module5 函数清单
+</figcaption>
+<div aria-describedby="tbl-m5-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>类型</th>
+<th>分类</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Macro5()</code></td>
+<td>Sub</td>
+<td><strong>控制流程</strong></td>
+<td>主入口</td>
+</tr>
+<tr class="even">
+<td><code>WW_Yahoo_Price_Dividend_Split(cd$, nd$, dc)</code></td>
+<td>Sub</td>
+<td>网络抓取 + 数据处理</td>
+<td>通用 Yahoo CSV 下载</td>
+</tr>
+<tr class="odd">
+<td><code>yhondd(nd$, cd$)</code></td>
+<td>Sub</td>
+<td><strong>工具函数</strong></td>
+<td>国家代码 → Yahoo 交易所代码映射</td>
+</tr>
+<tr class="even">
+<td><code>GDPSCR(nd$, cd$)</code></td>
+<td>Sub</td>
+<td>Excel写入</td>
+<td>创建 GDP 等超链接</td>
+</tr>
+<tr class="odd">
+<td><code>Macro6()</code></td>
+<td>Sub</td>
+<td>Excel写入</td>
+<td>GDP 链接更新</td>
+</tr>
+<tr class="even">
+<td><code>yymmx(yw)</code></td>
+<td>Function</td>
+<td>工具函数</td>
+<td>日期格式化</td>
+</tr>
+<tr class="odd">
+<td><code>CCRUMBT_BAK(rng)</code></td>
+<td>Function</td>
+<td>网络抓取</td>
+<td>Yahoo crumb（备份版）</td>
+</tr>
+<tr class="even">
+<td><code>DCSV_BAK(url)</code></td>
+<td>Function</td>
+<td>网络抓取</td>
+<td>CSV 下载（备份版）</td>
+</tr>
+<tr class="odd">
+<td><code>glhis()</code></td>
+<td>Sub (Private)</td>
+<td>网络抓取</td>
+<td>已废弃</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section id="交易所映射yhondd" class="level2" data-number="6.3">
+<h2 data-number="6.3" class="anchored" data-anchor-id="交易所映射yhondd"><span class="header-section-number">6.3</span> 交易所映射（yhondd）</h2>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>输入 nd$</th>
+<th>Yahoo 后缀</th>
+<th>市场</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>JP</td>
+<td>.T</td>
+<td>东京</td>
+</tr>
+<tr class="even">
+<td>UK</td>
+<td>.L</td>
+<td>伦敦</td>
+</tr>
+<tr class="odd">
+<td>HK</td>
+<td>.HK</td>
+<td>香港</td>
+</tr>
+<tr class="even">
+<td>CN (6开头)</td>
+<td>.SS</td>
+<td>上海</td>
+</tr>
+<tr class="odd">
+<td>CN (非6)</td>
+<td>.SZ</td>
+<td>深圳</td>
+</tr>
+<tr class="even">
+<td>AU</td>
+<td>.AX</td>
+<td>澳洲</td>
+</tr>
+<tr class="odd">
+<td>KR</td>
+<td>.KS</td>
+<td>首尔</td>
+</tr>
+<tr class="even">
+<td>FR</td>
+<td>.PA</td>
+<td>巴黎</td>
+</tr>
+<tr class="odd">
+<td>CA</td>
+<td>.TO</td>
+<td>多伦多</td>
+</tr>
+<tr class="even">
+<td>US / 其他</td>
+<td>(无后缀)</td>
+<td>美国</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="sec-m6" class="level1" data-number="7">
+<h1 data-number="7"><span class="header-section-number">7</span> Module6 — 指数选股</h1>
+<section id="系统定位-5" class="level2" data-number="7.1">
+<h2 data-number="7.1" class="anchored" data-anchor-id="系统定位-5"><span class="header-section-number">7.1</span> 系统定位</h2>
+<p>独立的市场指数和选股筛选模块，抓取五大市场指数成分股数据。</p>
+</section>
+<section id="函数清单-5" class="level2" data-number="7.2">
+<h2 data-number="7.2" class="anchored" data-anchor-id="函数清单-5"><span class="header-section-number">7.2</span> 函数清单</h2>
+<div id="tbl-m6-funcs" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m6-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;8: Module6 函数清单
+</figcaption>
+<div aria-describedby="tbl-m6-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>类型</th>
+<th>分类</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Macro10()</code></td>
+<td>Sub</td>
+<td>控制流程 + 网络抓取</td>
+<td>台股加权指数 + OTC</td>
+</tr>
+<tr class="even">
+<td><code>OTCC()</code></td>
+<td>Sub</td>
+<td>网络抓取 + 数据处理</td>
+<td>OTC 成分股数据</td>
+</tr>
+<tr class="odd">
+<td><code>Macro11()</code></td>
+<td>Sub</td>
+<td>控制流程 + 网络抓取</td>
+<td>S&amp;P 500（Finviz，26页）</td>
+</tr>
+<tr class="even">
+<td><code>Macro12()</code></td>
+<td>Sub</td>
+<td>控制流程 + 网络抓取</td>
+<td>日经 225（IE 自动化）</td>
+</tr>
+<tr class="odd">
+<td><code>Macro13()</code></td>
+<td>Sub</td>
+<td>控制流程 + 网络抓取</td>
+<td>恒生指数（IE 自动化）</td>
+</tr>
+<tr class="even">
+<td><code>Macro14()</code></td>
+<td>Sub</td>
+<td>控制流程 + 网络抓取</td>
+<td>沪深 180（QueryTables，9页）</td>
+</tr>
+<tr class="odd">
+<td><code>fm6()</code></td>
+<td>Sub</td>
+<td><strong>工具函数</strong></td>
+<td>格式化 + 清理临时数据</td>
+</tr>
+<tr class="even">
+<td><code>stwid</code> / <code>stwpe</code></td>
+<td>Sub ×2</td>
+<td>数据处理</td>
+<td>台股按代号/PE 排序</td>
+</tr>
+<tr class="odd">
+<td><code>stwoid</code> / <code>stwope</code></td>
+<td>Sub ×2</td>
+<td>数据处理</td>
+<td>OTC 按代号/PE 排序</td>
+</tr>
+<tr class="even">
+<td><code>susid</code> / <code>suspe</code></td>
+<td>Sub ×2</td>
+<td>数据处理</td>
+<td>美股按代号/PE 排序</td>
+</tr>
+<tr class="odd">
+<td><code>sjpid</code> / <code>sjppe</code></td>
+<td>Sub ×2</td>
+<td>数据处理</td>
+<td>日股按代号/PE 排序</td>
+</tr>
+<tr class="even">
+<td><code>shkid</code> / <code>shkpe</code></td>
+<td>Sub ×2</td>
+<td>数据处理</td>
+<td>港股按代号/PE 排序</td>
+</tr>
+<tr class="odd">
+<td><code>scnid</code> / <code>scnpe</code></td>
+<td>Sub ×2</td>
+<td>数据处理</td>
+<td>中股按代号/PE 排序</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section id="指数数据源" class="level2" data-number="7.3">
+<h2 data-number="7.3" class="anchored" data-anchor-id="指数数据源"><span class="header-section-number">7.3</span> 指数数据源</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 19%">
+<col style="width: 16%">
+<col style="width: 22%">
+<col style="width: 25%">
+<col style="width: 16%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Macro</th>
+<th>指数</th>
+<th>数据源</th>
+<th>抓取方式</th>
+<th style="text-align: center;">分页</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Macro10</td>
+<td>台股加权 + OTC</td>
+<td>twse.com.tw / tpex.org.tw</td>
+<td>QueryTables + XMLHTTP</td>
+<td style="text-align: center;">N</td>
+</tr>
+<tr class="even">
+<td>Macro11</td>
+<td>S&amp;P 500</td>
+<td>finviz.com</td>
+<td>QueryTables</td>
+<td style="text-align: center;">26 页</td>
+</tr>
+<tr class="odd">
+<td>Macro12</td>
+<td>日经 225</td>
+<td>investing.com</td>
+<td><strong>IE 自动化</strong></td>
+<td style="text-align: center;">N</td>
+</tr>
+<tr class="even">
+<td>Macro13</td>
+<td>恒生指数</td>
+<td>investing.com</td>
+<td><strong>IE 自动化</strong></td>
+<td style="text-align: center;">N</td>
+</tr>
+<tr class="odd">
+<td>Macro14</td>
+<td>沪深 180</td>
+<td>aastocks.com</td>
+<td>QueryTables</td>
+<td style="text-align: center;">9 页</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="sec-m7" class="level1" data-number="8">
+<h1 data-number="8"><span class="header-section-number">8</span> Module7 — 投资组合管理</h1>
+<section id="系统定位-6" class="level2" data-number="8.1">
+<h2 data-number="8.1" class="anchored" data-anchor-id="系统定位-6"><span class="header-section-number">8.1</span> 系统定位</h2>
+<p>收藏管理中心，串联所有市场模块。负责保存/更新/排序/对比收藏股票。函数数量最多（24 个）。</p>
+</section>
+<section id="函数清单-6" class="level2" data-number="8.2">
+<h2 data-number="8.2" class="anchored" data-anchor-id="函数清单-6"><span class="header-section-number">8.2</span> 函数清单</h2>
+<div id="tbl-m7-funcs" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m7-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;9: Module7 函数清单
+</figcaption>
+<div aria-describedby="tbl-m7-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>类型</th>
+<th>分类</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Macro15()</code></td>
+<td>Sub</td>
+<td>控制流程 + Excel写入</td>
+<td>保存台股到收藏</td>
+</tr>
+<tr class="even">
+<td><code>Macro16()</code></td>
+<td>Sub</td>
+<td>控制流程 + Excel写入</td>
+<td>保存美股到收藏</td>
+</tr>
+<tr class="odd">
+<td><code>Macro17()</code></td>
+<td>Sub</td>
+<td>控制流程 + Excel写入</td>
+<td>保存港股到收藏</td>
+</tr>
+<tr class="even">
+<td><code>Macro18()</code></td>
+<td>Sub</td>
+<td>控制流程 + Excel写入</td>
+<td>保存中股到收藏</td>
+</tr>
+<tr class="odd">
+<td><code>Macro19()</code></td>
+<td>Sub</td>
+<td>控制流程 + Excel写入</td>
+<td>保存全球到收藏</td>
+</tr>
+<tr class="even">
+<td><code>Macro20()</code></td>
+<td>Sub</td>
+<td><strong>控制流程</strong></td>
+<td><strong>批量更新所有收藏</strong>（核心）</td>
+</tr>
+<tr class="odd">
+<td><code>Macro21()</code></td>
+<td>Sub</td>
+<td>控制流程 + 网络抓取</td>
+<td>更新收藏 + 抓取实时行情</td>
+</tr>
+<tr class="even">
+<td><code>Macro22()</code></td>
+<td>Sub</td>
+<td>数据处理</td>
+<td>排列计算</td>
+</tr>
+<tr class="odd">
+<td><code>Macro23()</code></td>
+<td>Sub</td>
+<td>控制流程</td>
+<td>清空并重置收藏</td>
+</tr>
+<tr class="even">
+<td><code>Macro24()</code></td>
+<td>Sub</td>
+<td>数据处理</td>
+<td>按巴菲特距离排序</td>
+</tr>
+<tr class="odd">
+<td><code>Macro25()</code></td>
+<td>Sub</td>
+<td>数据处理</td>
+<td>按预期回报排序</td>
+</tr>
+<tr class="even">
+<td><code>Macro26()</code></td>
+<td>Sub</td>
+<td>数据处理</td>
+<td>按自定义排序</td>
+</tr>
+<tr class="odd">
+<td><code>Macro27()</code></td>
+<td>Sub</td>
+<td>数据处理 + Excel写入</td>
+<td>跨工作簿复制</td>
+</tr>
+<tr class="even">
+<td><code>Macro28()</code></td>
+<td>Sub</td>
+<td>数据处理</td>
+<td>按年度回报排序</td>
+</tr>
+<tr class="odd">
+<td><code>Macro29()</code></td>
+<td>Sub</td>
+<td>控制流程</td>
+<td>从外部文件导入</td>
+</tr>
+<tr class="even">
+<td><code>Macro40()</code></td>
+<td>Sub</td>
+<td>工具函数</td>
+<td>窗口滚动重置</td>
+</tr>
+<tr class="odd">
+<td><code>Macro41()</code></td>
+<td>Sub</td>
+<td>数据处理</td>
+<td>按年均回报排序</td>
+</tr>
+<tr class="even">
+<td><code>lst()</code></td>
+<td>Sub</td>
+<td><strong>数据处理 + Excel写入</strong></td>
+<td>列表管理核心</td>
+</tr>
+<tr class="odd">
+<td><code>fm7()</code></td>
+<td>Sub</td>
+<td><strong>工具函数</strong></td>
+<td>收藏表格式化</td>
+</tr>
+<tr class="even">
+<td><code>addlink()</code></td>
+<td>Sub</td>
+<td>Excel写入</td>
+<td>超链接批量添加</td>
+</tr>
+<tr class="odd">
+<td><code>Delete_Pictures()</code></td>
+<td>Sub</td>
+<td>工具函数</td>
+<td>删除内嵌图片</td>
+</tr>
+<tr class="even">
+<td><code>ak2k()</code></td>
+<td>Sub</td>
+<td>数据处理</td>
+<td>数据列映射转换</td>
+</tr>
+<tr class="odd">
+<td><code>w2k(i)</code></td>
+<td>Sub</td>
+<td>数据处理</td>
+<td>单行数据映射</td>
+</tr>
+<tr class="even">
+<td><code>stat(i, ax)</code></td>
+<td>Sub (Private)</td>
+<td>数据处理</td>
+<td>统计分类计数</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section id="核心调用树macro20-批量更新" class="level2" data-number="8.3">
+<h2 data-number="8.3" class="anchored" data-anchor-id="核心调用树macro20-批量更新"><span class="header-section-number">8.3</span> 核心调用树（Macro20 — 批量更新）</h2>
+<pre><code>Macro20()                                    ← 手动触发
+├── UnprotectSheet(ActiveSheet)
+│
+├── for each 收藏行:                          → 遍历所有收藏的股票
+│   ├── 判断市场类型 (TW/US/HK/CN/Global)
+│   ├── 切换到对应市场 Sheet
+│   ├── 写入代号到 A2 → 触发 Macro1~5
+│   ├── Application.Wait(等待抓取完成)
+│   ├── 切换回收藏 Sheet
+│   ├── w2k(i)                               → 映射数据到收藏列
+│   └── addlink()                            → 添加超链接
+│
+├── fm7()                                     → 格式化收藏表
+├── ProtectSheet(ActiveSheet)
+└── Beep</code></pre>
+</section>
+</section>
+<section id="sec-m8" class="level1" data-number="9">
+<h1 data-number="9"><span class="header-section-number">9</span> Module8 — 绩效追踪</h1>
+<section id="系统定位-7" class="level2" data-number="9.1">
+<h2 data-number="9.1" class="anchored" data-anchor-id="系统定位-7"><span class="header-section-number">9.1</span> 系统定位</h2>
+<p>投资绩效计算引擎，支持多个投资组合、多币种、XIRR 内部收益率计算，并与巴菲特 50 年 20% 复合增长进行对比。</p>
+</section>
+<section id="函数清单-7" class="level2" data-number="9.2">
+<h2 data-number="9.2" class="anchored" data-anchor-id="函数清单-7"><span class="header-section-number">9.2</span> 函数清单</h2>
+<div id="tbl-m8-funcs" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m8-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;10: Module8 函数清单
+</figcaption>
+<div aria-describedby="tbl-m8-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>类型</th>
+<th>分类</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Macro30()</code></td>
+<td>Sub</td>
+<td><strong>控制流程</strong></td>
+<td>主入口：遍历所有组合并计算</td>
+</tr>
+<tr class="even">
+<td><code>pf(f)</code></td>
+<td>Sub</td>
+<td>控制流程 + 网络抓取 + 数据处理</td>
+<td>单个组合绩效计算</td>
+</tr>
+<tr class="odd">
+<td><code>pfn(f)</code></td>
+<td>Sub</td>
+<td>数据处理</td>
+<td>总组合汇总</td>
+</tr>
+<tr class="even">
+<td><code>ddlet(f)</code></td>
+<td>Sub</td>
+<td>数据处理</td>
+<td>删除标记为”X”的持仓</td>
+</tr>
+<tr class="odd">
+<td><code>cpbf(f)</code></td>
+<td>Sub</td>
+<td><strong>数据处理</strong></td>
+<td>巴菲特距离计算</td>
+</tr>
+<tr class="even">
+<td><code>fm8(f)</code></td>
+<td>Sub</td>
+<td>工具函数</td>
+<td>绩效表格式化</td>
+</tr>
+<tr class="odd">
+<td><code>Macro35()</code></td>
+<td>Sub</td>
+<td>工具函数</td>
+<td>缩放视图</td>
+</tr>
+<tr class="even">
+<td><code>Macro36()</code></td>
+<td>Sub</td>
+<td>工具函数</td>
+<td>缩放视图</td>
+</tr>
+<tr class="odd">
+<td><code>Macro37()</code></td>
+<td>Sub</td>
+<td>控制流程</td>
+<td>从外部文件导入绩效</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section id="调用树-4" class="level2" data-number="9.3">
+<h2 data-number="9.3" class="anchored" data-anchor-id="调用树-4"><span class="header-section-number">9.3</span> 调用树</h2>
+<pre><code>Macro30()                                    ← 手动触发
+├── UnprotectSheet(ActiveSheet)
+│
+├── for each 投资组合 (f):
+│   ├── pf(f)                                → 单组合绩效
+│   │   ├── ddlet(f)                         → 删除标X的行
+│   │   ├── ConnectMarketWatch(url, Cells)   → 抓取实时价格(?)
+│   │   ├── ConnectWinHttp(wise_url, 1)      → 汇率抓取
+│   │   ├── [XIRR 计算]                      → Excel XIRR 公式
+│   │   ├── cpbf(f)                          → 巴菲特距离
+│   │   │   └── 公式: 100 × (A^0.5 × B) / 3701
+│   │   └── fm8(f)                           → 格式化
+│   │
+│   └── pfn(f)                               → 总组合汇总
+│       ├── ddlet(f)
+│       ├── cpbf(f)
+│       └── fm8(f)
+│
+├── ProtectSheet(ActiveSheet)
+└── Application.Wait</code></pre>
+</section>
+</section>
+<section id="sec-m9" class="level1" data-number="10">
+<h1 data-number="10"><span class="header-section-number">10</span> Module9 — 税务计算</h1>
+<section id="系统定位-8" class="level2" data-number="10.1">
+<h2 data-number="10.1" class="anchored" data-anchor-id="系统定位-8"><span class="header-section-number">10.1</span> 系统定位</h2>
+<p>台股专用的税务计算模块，处理除息税和补充保费（二代健保）。</p>
+</section>
+<section id="函数清单-8" class="level2" data-number="10.2">
+<h2 data-number="10.2" class="anchored" data-anchor-id="函数清单-8"><span class="header-section-number">10.2</span> 函数清单</h2>
+<div id="tbl-m9-funcs" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-m9-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;11: Module9 函数清单
+</figcaption>
+<div aria-describedby="tbl-m9-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>类型</th>
+<th>分类</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>tax()</code></td>
+<td>Sub</td>
+<td>控制流程</td>
+<td>打开外部税务文件并导入</td>
+</tr>
+<tr class="even">
+<td><code>exdiv()</code></td>
+<td>Sub</td>
+<td>控制流程 + 网络抓取 + 数据处理</td>
+<td>除息日/税额计算主逻辑</td>
+</tr>
+<tr class="odd">
+<td><code>taxtb()</code></td>
+<td>Sub</td>
+<td><strong>数据处理 + Excel写入</strong></td>
+<td>税率表生成与公式填充</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+<section id="调用树-5" class="level2" data-number="10.3">
+<h2 data-number="10.3" class="anchored" data-anchor-id="调用树-5"><span class="header-section-number">10.3</span> 调用树</h2>
+<pre><code>tax()                                        ← 手动触发
+├── UnprotectSheet(ActiveSheet)
+├── Application.GetOpenFilename()            → 打开外部工作簿
+├── 复制数据到当前表
+└── taxtb()                                  → 计算税率表
+
+exdiv()                                      ← 手动触发
+├── UnprotectSheet(ActiveSheet)
+│
+├── for each 持股:
+│   ├── TSECFSQT(url_moneydj, Cells, "1")   ← Module1
+│   │   → 抓取除息日期+金额
+│   ├── TSECFSQT(url_moneydj, Cells, "1")
+│   │   → 抓取现金股利
+│   ├── 计算股息税额
+│   ├── 判断: 股息 &gt; 20,000 TWD → 补充保费 2.11%
+│   └── 处理 KY 公司（境外公司）特殊逻辑
+│
+├── taxtb()                                  → 计算税率表
+├── QueryTablesDelete / Delete_Pictures
+└── ProtectSheet</code></pre>
+</section>
+</section>
+<section id="sec-shared" class="level1" data-number="11">
+<h1 data-number="11"><span class="header-section-number">11</span> shared_modules — 公共工具层</h1>
+<section id="系统定位-9" class="level2" data-number="11.1">
+<h2 data-number="11.1" class="anchored" data-anchor-id="系统定位-9"><span class="header-section-number">11.1</span> 系统定位</h2>
+<p>全局共享的基础设施层，提供类型定义、股票查找、代号下载、工作表保护等被所有模块依赖的功能。</p>
+</section>
+<section id="声明" class="level2" data-number="11.2">
+<h2 data-number="11.2" class="anchored" data-anchor-id="声明"><span class="header-section-number">11.2</span> 声明</h2>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode vb code-with-copy"><code class="sourceCode monobasic"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">Public</span> theMarket <span class="kw">As</span> <span class="dt">String</span>          <span class="co">' 当前市场</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="kw">Public</span> theIndustry <span class="kw">As</span> <span class="dt">String</span>        <span class="co">' 产业类别</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="kw">Public</span> theMarketdate <span class="kw">As</span> <span class="dt">String</span>      <span class="co">' 市场日期</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="kw">Public</span> myWait <span class="kw">As</span> <span class="dt">Boolean</span>            <span class="co">' 等待标志</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="kw">Public</span> Type baseInfo</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    theCode <span class="kw">As</span> <span class="dt">String</span>               <span class="co">' 股票代号</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    theName <span class="kw">As</span> <span class="dt">String</span>               <span class="co">' 名称</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    Percent <span class="kw">As</span> <span class="dt">Single</span>               <span class="co">' 比例</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>End Type</span></code></pre></div><button title="复制到剪贴板" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="函数清单-9" class="level2" data-number="11.3">
+<h2 data-number="11.3" class="anchored" data-anchor-id="函数清单-9"><span class="header-section-number">11.3</span> 函数清单</h2>
+<div id="tbl-shared-funcs" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-shared-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;12: shared_modules 函数清单
+</figcaption>
+<div aria-describedby="tbl-shared-funcs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>类型</th>
+<th>分类</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>findAll(theStr)</code></td>
+<td>Function</td>
+<td><strong>数据处理</strong></td>
+<td>在股票数据库中查找 → 返回 baseInfo</td>
+</tr>
+<tr class="even">
+<td><code>Stocklist()</code></td>
+<td>Sub</td>
+<td><strong>网络抓取 + 数据处理</strong></td>
+<td>从 TWSE 下载完整台股代号列表</td>
+</tr>
+<tr class="odd">
+<td><code>enEvt()</code></td>
+<td>Sub</td>
+<td>工具函数</td>
+<td>重新启用 Application.EnableEvents</td>
+</tr>
+<tr class="even">
+<td><code>Delete_Connection_XL2007()</code></td>
+<td>Sub</td>
+<td>工具函数</td>
+<td>删除 XL2007 连接</td>
+</tr>
+<tr class="odd">
+<td><code>Delete_Connection_XL2007_2()</code></td>
+<td>Sub</td>
+<td>工具函数</td>
+<td>删除 XL2007 连接（备选）</td>
+</tr>
+<tr class="even">
+<td><code>Delete_Connection_XL2003()</code></td>
+<td>Sub</td>
+<td>工具函数</td>
+<td>删除 XL2003 QueryTables</td>
+</tr>
+<tr class="odd">
+<td><code>Delete_Connection_XL2003_2()</code></td>
+<td>Sub</td>
+<td>工具函数</td>
+<td>删除当前 Sheet QueryTables</td>
+</tr>
+<tr class="even">
+<td><code>ProtectSheet(mysheet)</code></td>
+<td>Sub</td>
+<td><strong>工具函数</strong></td>
+<td>锁定工作表（按 Sheet 名称解锁不同区域）</td>
+</tr>
+<tr class="odd">
+<td><code>UnprotectSheet(mysheet)</code></td>
+<td>Sub</td>
+<td><strong>工具函数</strong></td>
+<td>解锁工作表</td>
+</tr>
+<tr class="even">
+<td><code>Auto_open()</code></td>
+<td>Sub</td>
+<td>控制流程</td>
+<td>启动时写入 ZZ1 标记</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+</section>
+</section>
+<section id="sec-deps" class="level1" data-number="12">
+<h1 data-number="12"><span class="header-section-number">12</span> 模块间依赖矩阵</h1>
+<p>行 = 调用方，列 = 被调用方。数字 = 调用的函数数量。</p>
+<div id="tbl-deps" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-deps-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;13: 模块间调用依赖矩阵
+</figcaption>
+<div aria-describedby="tbl-deps-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 23%">
+<col style="width: 8%">
+<col style="width: 9%">
+<col style="width: 9%">
+<col style="width: 9%">
+<col style="width: 9%">
+<col style="width: 9%">
+<col style="width: 9%">
+<col style="width: 9%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>调用方 ↓ / 被调用方 →</th>
+<th style="text-align: center;">shared</th>
+<th style="text-align: center;">Module1</th>
+<th style="text-align: center;">Module2</th>
+<th style="text-align: center;">Module3</th>
+<th style="text-align: center;">Module4</th>
+<th style="text-align: center;">Module5</th>
+<th style="text-align: center;">Module6</th>
+<th style="text-align: center;">Module7</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Module1</strong></td>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">1</td>
+</tr>
+<tr class="even">
+<td><strong>Module2</strong></td>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+</tr>
+<tr class="odd">
+<td><strong>Module3</strong></td>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+</tr>
+<tr class="even">
+<td><strong>Module4</strong></td>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">3</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+</tr>
+<tr class="odd">
+<td><strong>Module5</strong></td>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">5</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+</tr>
+<tr class="even">
+<td><strong>Module6</strong></td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;"></td>
+</tr>
+<tr class="odd">
+<td><strong>Module7</strong></td>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">4</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr class="even">
+<td><strong>Module8</strong></td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+</tr>
+<tr class="odd">
+<td><strong>Module9</strong></td>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;"></td>
+<td style="text-align: center;">1</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">提示</span>依赖关键发现
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<ul>
+<li><strong>Module2 是隐含的公共库</strong>：定义了 6 个网络函数 + 6 个工具函数，被 Module3~9 广泛调用</li>
+<li><strong>shared_modules 被所有模块依赖</strong>：<code>UnprotectSheet</code> / <code>ProtectSheet</code> 是必调函数</li>
+<li><strong>Module7 依赖最广</strong>：唯一同时调用 Module1~5 全部市场模块的模块（通过 Macro20 批量更新）</li>
+<li><strong>Module1 和 Module9 存在耦合</strong>：Module9.exdiv 调用 Module1.TSECFSQT</li>
+</ul>
+</div>
+</div>
+</section>
+<section id="sec-classification" class="level1" data-number="13">
+<h1 data-number="13"><span class="header-section-number">13</span> 函数职责分类汇总</h1>
+<section id="按分类统计" class="level2" data-number="13.1">
+<h2 data-number="13.1" class="anchored" data-anchor-id="按分类统计"><span class="header-section-number">13.1</span> 按分类统计</h2>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-classification" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-classification-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-classification">pie title 函数职责分类（共 ~90 个函数）
+    "控制流程" : 25
+    "网络抓取" : 18
+    "数据处理" : 22
+    "Excel写入" : 15
+    "工具函数" : 20
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-classification-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;2: 全系统函数职责分类分布
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="跨模块工具函数一览" class="level2" data-number="13.2">
+<h2 data-number="13.2" class="anchored" data-anchor-id="跨模块工具函数一览"><span class="header-section-number">13.2</span> 跨模块工具函数一览</h2>
+<p>以下函数定义在某个 Module 中，但被多个模块调用，实质上是”公共函数”：</p>
+<div id="tbl-cross-module" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-cross-module-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;14: 跨模块公共函数清单
+</figcaption>
+<div aria-describedby="tbl-cross-module-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 17%">
+<col style="width: 25%">
+<col style="width: 31%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>函数</th>
+<th>定义位置</th>
+<th>被调用位置</th>
+<th>建议归属</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>ConnectXMLHTTP</code></td>
+<td>Module2</td>
+<td>M2, M5, M6</td>
+<td>→ shared_modules</td>
+</tr>
+<tr class="even">
+<td><code>ConnectMarketWatch</code></td>
+<td>Module2</td>
+<td>M2, M3, M4, M5, M6, M7, M8</td>
+<td>→ shared_modules</td>
+</tr>
+<tr class="odd">
+<td><code>ConnectWinHttp</code></td>
+<td>Module2</td>
+<td>M2, M3, M5, M8</td>
+<td>→ shared_modules</td>
+</tr>
+<tr class="even">
+<td><code>ConnectIE</code></td>
+<td>Module2</td>
+<td>M6 (Macro12, 13)</td>
+<td>→ shared_modules</td>
+</tr>
+<tr class="odd">
+<td><code>highlow</code></td>
+<td>Module2</td>
+<td>M2, M3, M4, M5</td>
+<td>→ shared_modules</td>
+</tr>
+<tr class="even">
+<td><code>mkw</code></td>
+<td>Module2</td>
+<td>M2, M5, M7</td>
+<td>→ shared_modules</td>
+</tr>
+<tr class="odd">
+<td><code>yho</code></td>
+<td>Module2</td>
+<td>M2, M5</td>
+<td>→ shared_modules</td>
+</tr>
+<tr class="even">
+<td><code>wsj</code></td>
+<td>Module2</td>
+<td>M2, M5</td>
+<td>→ shared_modules</td>
+</tr>
+<tr class="odd">
+<td><code>unitconversion</code></td>
+<td>Module2</td>
+<td>M2, M5</td>
+<td>→ shared_modules</td>
+</tr>
+<tr class="even">
+<td><code>splitt</code></td>
+<td>Module2</td>
+<td>M2 (via highlow)</td>
+<td>→ shared_modules</td>
+</tr>
+<tr class="odd">
+<td><code>DCSV</code></td>
+<td>Module2</td>
+<td>M3, M4, M5 (废弃)</td>
+<td>→ shared_modules</td>
+</tr>
+<tr class="even">
+<td><code>CCRUMBT</code></td>
+<td>Module2</td>
+<td>M3, M4, M5 (废弃)</td>
+<td>→ shared_modules</td>
+</tr>
+<tr class="odd">
+<td><code>Delete_Pictures</code></td>
+<td>Module7</td>
+<td>M1, M3, M4, M5, M9</td>
+<td>→ shared_modules</td>
+</tr>
+<tr class="even">
+<td><code>TSECFSQT</code></td>
+<td>Module1</td>
+<td>M1, M9</td>
+<td>→ shared_modules</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">警告</span>重构建议
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>上述 14 个函数实质为公共基础设施，应从 Module1/Module2/Module7 中抽离，集中到 <code>shared_modules</code> 或新建的 <code>network_utils</code> 模块中。当前分散在各业务模块中，增加了维护难度和潜在的命名冲突风险。</p>
+</div>
+</div>
+</section>
+</section>
+<section id="sec-summary" class="level1" data-number="14">
+<h1 data-number="14"><span class="header-section-number">14</span> 各模块在系统中的角色总结</h1>
+<div id="tbl-summary" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-summary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+表&nbsp;15: 模块角色总结
+</figcaption>
+<div aria-describedby="tbl-summary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 17%">
+<col style="width: 13%">
+<col style="width: 17%">
+<col style="width: 19%">
+<col style="width: 19%">
+<col style="width: 13%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Module</th>
+<th>角色</th>
+<th style="text-align: center;">函数数</th>
+<th>对外暴露</th>
+<th>核心入口</th>
+<th>依赖</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>shared_modules</strong></td>
+<td>公共基础设施</td>
+<td style="text-align: center;">10</td>
+<td>全部</td>
+<td>Auto_open</td>
+<td>—</td>
+</tr>
+<tr class="even">
+<td><strong>Module1</strong></td>
+<td>台股数据引擎</td>
+<td style="text-align: center;">14</td>
+<td>Macro1, TSECFSQT</td>
+<td>Macro1</td>
+<td>shared</td>
+</tr>
+<tr class="odd">
+<td><strong>Module2</strong></td>
+<td>美股引擎 + <strong>隐含公共连接库</strong></td>
+<td style="text-align: center;">18</td>
+<td>几乎全部</td>
+<td>Macro2</td>
+<td>shared</td>
+</tr>
+<tr class="even">
+<td><strong>Module3</strong></td>
+<td>港股数据引擎</td>
+<td style="text-align: center;">3</td>
+<td>Macro3</td>
+<td>Macro3</td>
+<td>shared, M2</td>
+</tr>
+<tr class="odd">
+<td><strong>Module4</strong></td>
+<td>中股数据引擎</td>
+<td style="text-align: center;">3</td>
+<td>Macro4</td>
+<td>Macro4</td>
+<td>shared, M2</td>
+</tr>
+<tr class="even">
+<td><strong>Module5</strong></td>
+<td>全球数据引擎</td>
+<td style="text-align: center;">9</td>
+<td>Macro5, Macro6, yhondd</td>
+<td>Macro5</td>
+<td>shared, M2</td>
+</tr>
+<tr class="odd">
+<td><strong>Module6</strong></td>
+<td>指数选股</td>
+<td style="text-align: center;">19</td>
+<td>Macro10~14, 排序</td>
+<td>Macro10~14</td>
+<td>shared, M2</td>
+</tr>
+<tr class="even">
+<td><strong>Module7</strong></td>
+<td>投资组合管理</td>
+<td style="text-align: center;">24</td>
+<td>Macro15~29, Delete_Pictures</td>
+<td>Macro20</td>
+<td>shared, M1~5</td>
+</tr>
+<tr class="odd">
+<td><strong>Module8</strong></td>
+<td>绩效追踪</td>
+<td style="text-align: center;">9</td>
+<td>Macro30</td>
+<td>Macro30</td>
+<td>shared, M2</td>
+</tr>
+<tr class="even">
+<td><strong>Module9</strong></td>
+<td>税务计算</td>
+<td style="text-align: center;">3</td>
+<td>tax, exdiv</td>
+<td>exdiv</td>
+<td>shared, M1, M7</td>
+</tr>
+</tbody>
+</table>
+</div>
+</figure>
+</div>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div id="fig-module-roles" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-module-roles-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div>
+<pre class="mermaid mermaid-js" data-label="fig-module-roles">flowchart LR
+    subgraph infra["基础设施"]
+        SM["shared_modules&lt;br/&gt;保护/查找/连接清理"]
+        M2U["Module2 内工具函数&lt;br/&gt;Connect*/mkw/yho/wsj&lt;br/&gt;highlow/unitconv"]
+    end
+
+    subgraph engines["数据引擎"]
+        M1["Module1&lt;br/&gt;台股"]
+        M2E["Module2&lt;br/&gt;美股"]
+        M3["Module3&lt;br/&gt;港股"]
+        M4["Module4&lt;br/&gt;中股"]
+        M5["Module5&lt;br/&gt;全球"]
+    end
+
+    subgraph biz["业务层"]
+        M6["Module6&lt;br/&gt;指数选股"]
+        M7["Module7&lt;br/&gt;组合管理"]
+        M8["Module8&lt;br/&gt;绩效"]
+        M9["Module9&lt;br/&gt;税务"]
+    end
+
+    SM --&gt; M1 &amp; M2E &amp; M3 &amp; M4 &amp; M5 &amp; M6 &amp; M7 &amp; M8 &amp; M9
+    M2U --&gt; M3 &amp; M4 &amp; M5 &amp; M6 &amp; M7 &amp; M8
+
+    M1 &amp; M2E &amp; M3 &amp; M4 &amp; M5 --&gt; M7
+    M7 --&gt; M8
+    M1 --&gt; M9
+
+    style infra fill:#f3e5f5,stroke:#7b1fa2
+    style engines fill:#e8f5e9,stroke:#388e3c
+    style biz fill:#fff3e0,stroke:#f57c00
+</pre>
+</div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-module-roles-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+图&nbsp;3: 模块角色与数据流
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "已复制");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "已复制");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

@@ -1,0 +1,1004 @@
+---
+title: "Python 重构架构设计方案"
+subtitle: "盈再表 VBA 系统 → Python 现代化迁移蓝图"
+author: "Trading Project Team"
+date: today
+date-format: "YYYY-MM-DD"
+lang: zh
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "目录"
+    number-sections: true
+    code-fold: true
+    theme: cosmo
+    fontsize: "1rem"
+    mainfont: "PingFang SC, Microsoft YaHei, sans-serif"
+execute:
+  echo: false
+---
+
+# 执行摘要 {#sec-summary}
+
+::: {.callout-tip}
+## 一句话总结
+将盈再表从 **Windows-only VBA 单体系统** 迁移为 **跨平台 Python 三层架构**，以 yfinance 为核心数据源，用 pandas 替代 Excel 单元格计算，用 openpyxl/xlwings 保持 Excel 兼容，最终实现**可维护、可测试、跨平台**的现代化投资分析系统。
+:::
+
+## 迁移动机
+
+| 现状痛点 | Python 方案 |
+|---------|------------|
+| 完全依赖 Windows COM 组件（MSXML2、WinHttp、IE） | `requests` + `yfinance` — 跨平台 |
+| 10+ 个脆弱的 HTML 抓取数据源 | yfinance API — 单一稳定接口 |
+| `On Error Resume Next` 静默吞错 | Python 结构化异常 + logging |
+| 90+ 函数分散在 9 个 Module 中，重复代码严重 | OOP 类封装 + 职责分离 |
+| 所有 URL / 列号硬编码在代码中 | 配置文件（YAML / .env）外部化 |
+| 无法在 macOS 运行 | Python 天然跨平台 |
+| 无单元测试 | pytest 全覆盖 |
+
+## 迁移原则
+
+1. **渐进式迁移** — VBA 和 Python 共存过渡，不一次性全部重写
+2. **数据优先** — 先迁移数据抓取层（价值最高、风险最大的部分）
+3. **API 优于抓取** — 能用 API 的绝不再 scrape HTML
+4. **Excel 兼容** — 保留 `.xlsm` 作为 UI 前端，Python 作为后端引擎
+5. **可测试** — 每个模块都有对应的单元测试
+
+
+# 新系统架构 {#sec-architecture}
+
+## 三层架构总图
+
+```{mermaid}
+%%| label: fig-architecture
+%%| fig-cap: "Python 新系统三层架构"
+%%| fig-width: 100%
+graph TB
+    subgraph presentation["表现层 (Presentation)"]
+        direction LR
+        EXCEL["Excel .xlsm<br/><small>xlwings UDF 驱动</small><br/><small>保留原始 Sheet 布局</small>"]
+        CLI["CLI 工具<br/><small>命令行快速查询</small><br/><small>python -m yinzaibiao query 2330</small>"]
+        WEB["Web Dashboard<br/><small>(Phase 3 — 可选)</small><br/><small>Streamlit / Dash</small>"]
+    end
+
+    subgraph business["业务逻辑层 (Business Logic)"]
+        direction LR
+        ANALYZER["StockAnalyzer<br/><small>单股财务体检</small>"]
+        PORTFOLIO["PortfolioManager<br/><small>组合管理 + 批量更新</small>"]
+        PERF["PerformanceTracker<br/><small>XIRR + 巴菲特距离</small>"]
+        TAX["TaxCalculator<br/><small>台股除息税 + 补充保费</small>"]
+        SCREENER["IndexScreener<br/><small>指数选股 + PE 筛选</small>"]
+        VALUATION["ValuationEngine<br/><small>便宜价/合理价/昂贵价</small>"]
+    end
+
+    subgraph data["数据层 (Data Access)"]
+        direction LR
+        YF["YFinanceProvider<br/><small>yfinance 封装</small><br/><small>历史价格/财报/股息</small>"]
+        TW["TWMarketProvider<br/><small>TWSE + TPEX + MoneyDJ</small><br/><small>台股专用数据</small>"]
+        FX["FXProvider<br/><small>汇率获取</small><br/><small>ECB / Wise / yfinance</small>"]
+        CACHE["CacheManager<br/><small>SQLite 本地缓存</small><br/><small>避免重复请求</small>"]
+    end
+
+    subgraph infra["基础设施 (Infrastructure)"]
+        direction LR
+        CONFIG["ConfigManager<br/><small>YAML 配置</small>"]
+        LOG["Logger<br/><small>结构化日志</small>"]
+        HTTP["HttpClient<br/><small>requests 封装</small><br/><small>重试 + 限速 + UA</small>"]
+        EXCEL_IO["ExcelIO<br/><small>openpyxl / xlwings</small><br/><small>读写 Excel</small>"]
+    end
+
+    EXCEL --> ANALYZER & PORTFOLIO & PERF & TAX & SCREENER
+    CLI --> ANALYZER & PORTFOLIO & PERF
+    WEB --> ANALYZER & PORTFOLIO & PERF
+
+    ANALYZER --> YF & TW & FX
+    PORTFOLIO --> ANALYZER
+    PERF --> FX
+    TAX --> TW
+    SCREENER --> YF & TW
+    VALUATION --> YF
+
+    YF --> HTTP & CACHE
+    TW --> HTTP & CACHE
+    FX --> HTTP & CACHE
+
+    HTTP --> CONFIG & LOG
+    EXCEL_IO --> CONFIG
+    CACHE --> LOG
+
+    style presentation fill:#e3f2fd,stroke:#1565c0
+    style business fill:#fff3e0,stroke:#f57c00
+    style data fill:#e8f5e9,stroke:#388e3c
+    style infra fill:#f3e5f5,stroke:#7b1fa2
+```
+
+## 与 VBA 旧架构的对应关系
+
+```{mermaid}
+%%| label: fig-mapping
+%%| fig-cap: "VBA 旧架构 → Python 新架构 映射"
+%%| fig-width: 100%
+graph LR
+    subgraph old["VBA 旧系统"]
+        direction TB
+        O_S1["Sheet1~5.cls<br/>Worksheet_Change"]
+        O_M1["Module1~5<br/>数据抓取 × 5"]
+        O_M6["Module6<br/>指数选股"]
+        O_M7["Module7<br/>组合管理"]
+        O_M8["Module8<br/>绩效追踪"]
+        O_M9["Module9<br/>税务计算"]
+        O_SM["shared_modules<br/>findAll / Protect"]
+        O_M2U["Module2 工具函数<br/>Connect* / highlow"]
+        O_JC["JsonConverter<br/>(实为 M8 副本)"]
+    end
+
+    subgraph new["Python 新系统"]
+        direction TB
+        N_XW["xlwings UDF<br/>Excel 集成层"]
+        N_DP["data_providers/<br/>yfinance + tw_market + fx"]
+        N_SC["screener.py<br/>指数选股"]
+        N_PM["portfolio.py<br/>组合管理"]
+        N_PF["performance.py<br/>XIRR + 巴菲特距离"]
+        N_TX["tax.py<br/>税务计算"]
+        N_UT["utils/<br/>http + cache + config"]
+        N_DEL["已删除<br/>不再需要"]
+    end
+
+    O_S1 -->|"替代"| N_XW
+    O_M1 -->|"合并 × 5 → 1"| N_DP
+    O_M6 -->|"1:1"| N_SC
+    O_M7 -->|"1:1"| N_PM
+    O_M8 -->|"1:1"| N_PF
+    O_M9 -->|"1:1"| N_TX
+    O_SM -->|"拆分"| N_UT
+    O_M2U -->|"拆分"| N_UT
+    O_JC -->|"删除"| N_DEL
+
+    style old fill:#ffcdd2,stroke:#c62828
+    style new fill:#c8e6c9,stroke:#2e7d32
+    style N_DEL fill:#eeeeee,stroke:#9e9e9e
+```
+
+
+# 推荐项目结构 {#sec-structure}
+
+## 目录树
+
+```
+Trading Project/
+├── pyproject.toml                  ← 项目元数据 + 依赖管理
+├── README.md
+├── .env.example                    ← 环境变量模板
+├── config/
+│   └── settings.yaml               ← 数据源 URL、列映射、阈值配置
+│
+├── src/
+│   └── yinzaibiao/                  ← 主包（盈再表拼音）
+│       ├── __init__.py
+│       ├── __main__.py              ← CLI 入口: python -m yinzaibiao
+│       │
+│       ├── models/                  ← 数据模型（dataclass）
+│       │   ├── __init__.py
+│       │   ├── stock.py             ← StockInfo, FinancialReport
+│       │   ├── portfolio.py         ← PortfolioItem, Holding
+│       │   └── market.py           ← MarketType(Enum), IndexConstituent
+│       │
+│       ├── data_providers/          ← 数据层：获取原始数据
+│       │   ├── __init__.py
+│       │   ├── base.py              ← DataProvider(ABC) 抽象基类
+│       │   ├── yfinance_provider.py ← yfinance 封装（美/港/中/全球）
+│       │   ├── tw_market.py         ← 台股专用（TWSE/TPEX/MoneyDJ）
+│       │   ├── fx_provider.py       ← 汇率获取
+│       │   └── cache.py             ← SQLite 缓存层
+│       │
+│       ├── analyzers/               ← 业务层：分析和计算
+│       │   ├── __init__.py
+│       │   ├── stock_analyzer.py    ← 单股财务体检
+│       │   ├── valuation.py         ← 估值模型（便宜/合理/昂贵价）
+│       │   ├── portfolio.py         ← 组合管理 + 批量更新
+│       │   ├── performance.py       ← XIRR + 巴菲特距离
+│       │   ├── screener.py          ← 指数选股 + PE 筛选
+│       │   └── tax.py               ← 台股税务计算
+│       │
+│       ├── excel/                   ← 表现层：Excel 集成
+│       │   ├── __init__.py
+│       │   ├── xlwings_udf.py       ← xlwings UDF 函数
+│       │   ├── writer.py            ← openpyxl 写入逻辑
+│       │   └── formatter.py         ← 单元格格式化（替代 fm6/fm7/fm8）
+│       │
+│       └── utils/                   ← 基础设施
+│           ├── __init__.py
+│           ├── http_client.py       ← requests 封装（重试/限速/UA轮换）
+│           ├── config.py            ← 配置管理
+│           ├── logger.py            ← 结构化日志
+│           └── converters.py        ← 单位转换/代号映射/日期格式化
+│
+├── tests/                           ← 测试
+│   ├── conftest.py
+│   ├── test_data_providers/
+│   ├── test_analyzers/
+│   ├── test_excel/
+│   └── fixtures/                    ← 测试用的 mock 数据
+│       ├── sample_financials.json
+│       └── sample_prices.csv
+│
+├── Excel/                           ← 原始 VBA 文件（保留参考）
+│   ├── 盈再表250723.xlsm
+│   ├── Modules/
+│   ├── Objects/
+│   └── Forms/
+│
+├── docs/                            ← 分析报告
+│   ├── architecture-report.qmd
+│   ├── module-analysis.qmd
+│   ├── business-logic.qmd
+│   ├── dataflow-analysis.qmd
+│   ├── event-entry-analysis.qmd
+│   └── python-refactor-plan.qmd     ← 本文档
+│
+└── venv/                            ← Python 虚拟环境
+```
+
+## 关键设计决策
+
+| 决策点 | 选择 | 理由 |
+|--------|------|------|
+| 包管理 | `pyproject.toml` | 现代 Python 标准（PEP 621），取代 setup.py + requirements.txt |
+| 数据模型 | `dataclass` | 轻量、类型安全、VBA `baseInfo` 的自然升级 |
+| 配置格式 | YAML | 比 JSON 可读性好，支持注释 |
+| 缓存后端 | SQLite | 零配置、嵌入式、pandas 原生支持 |
+| Excel 集成 | xlwings（macOS/Windows）+ openpyxl（纯 Python） | xlwings 支持实时交互，openpyxl 支持无 Excel 环境 |
+| HTTP 客户端 | requests + tenacity | 成熟、稳定、自动重试 |
+| 测试框架 | pytest + pytest-mock | Python 生态标准 |
+
+
+# VBA → Python 函数映射 {#sec-mapping}
+
+## 数据抓取层（最大变化）
+
+VBA 现有 5 个几乎相同的 Module（Module1~5），每个对应一个市场，内部各自实现 HTTP 连接和数据解析。
+Python 中合并为 **2 个 Provider**，通过参数区分市场。
+
+### yfinance 可替代的 VBA 函数
+
+| VBA 函数 | 所在 Module | Python 替代 | yfinance API |
+|---------|-----------|------------|-------------|
+| `Yahoo_Price_Dividend_Split` | M2 | `YFinanceProvider.get_history()` | `Ticker.history()` |
+| `HK_Yahoo_Price_Dividend_Split` | M3 | 同上（后缀 `.HK`） | `Ticker("0005.HK").history()` |
+| `CN_Yahoo_Price_Dividend_Split` | M4 | 同上（后缀 `.SS`/`.SZ`） | `Ticker("600036.SS").history()` |
+| `WW_Yahoo_Price_Dividend_Split` | M5 | 同上（动态后缀） | `Ticker("7203.T").history()` |
+| `ConnectMarketWatch`（财报部分） | M2 | `YFinanceProvider.get_financials()` | `Ticker.income_stmt` / `balance_sheet` / `cashflow` |
+| `highlow` | M2 | `YFinanceProvider.get_history()` | 已含拆股调整价格 |
+| `unitconversion` | M2 | **不再需要** | yfinance 返回原始数值 |
+| `splitt` | M2 | **不再需要** | yfinance 自动拆股调整 |
+| `HandleNulls` | M2 | **不再需要** | pandas 原生 NaN 处理 |
+| `yhondd` | M5 | `YFinanceProvider._get_suffix()` | 内置映射字典 |
+| `mkw` / `yho` / `wsj` | M2 | **不再需要** | 统一使用 yfinance 代号格式 |
+| `CCRUMBT` / `DCSV` | M2 | **已废弃** | yfinance 内部处理认证 |
+| `ConnectIE` / `DelIE` | M2 | **已废弃** | 不再需要 IE 浏览器 |
+
+: yfinance 可替代的 VBA 函数 {#tbl-yf-replace}
+
+::: {.callout-important}
+## 关键洞察：yfinance 可替代约 60% 的数据抓取代码
+VBA 系统的 5 个数据模块（Module1~5）中，**约 60% 的代码用于 HTTP 连接、HTML 解析和数据清洗**。
+yfinance 将这些全部封装为单个 Python 调用，且自动处理拆股调整、单位转换、null 值等。
+:::
+
+### 仍需自行抓取的数据（台股专用）
+
+| VBA 函数 | 数据源 | Python 替代 | 理由 |
+|---------|--------|------------|------|
+| `TSECFSQT` | MoneyDJ | `TWMarketProvider.get_financials()` | 台股季度财报 yfinance 不提供 |
+| `TSECFSQTF` | MoneyDJ | 同上 | POST 请求版 |
+| `TWReport` | MoneyDJ | `TWMarketProvider.get_report()` | HTML 财报表格 |
+| `OTC` | TPEX | `TWMarketProvider.get_otc_monthly()` | OTC 月统计 |
+| `Stocklist` | TWSE/TPEX | `TWMarketProvider.get_stock_list()` | 台股代号清单 |
+| `OTCC`（M6） | TPEX | `TWMarketProvider.get_otc_constituents()` | OTC 成分股 |
+
+: 台股专用函数（需 requests 自行抓取） {#tbl-tw-custom}
+
+## 业务逻辑层（结构不变，实现升级）
+
+| VBA 函数 | Module | Python 类.方法 | 变化说明 |
+|---------|--------|---------------|---------|
+| `Macro15~19` | M7 | `PortfolioManager.save_stock()` | 5 个函数 → 1 个（市场参数化） |
+| `Macro20` | M7 | `PortfolioManager.batch_update()` | 编排逻辑不变，内部调数据层 |
+| `Macro21~29` | M7 | `PortfolioManager.sort_by()` | 10 个排序 Macro → 1 个参数化 |
+| `lst` / `w2k` / `ak2k` | M7 | `PortfolioManager._map_data()` | 数据映射内部化 |
+| `fm7` / `addlink` | M7 | `ExcelFormatter.format_portfolio()` | 格式化抽到表现层 |
+| `Macro30` | M8 | `PerformanceTracker.calculate_all()` | 主入口 |
+| `pf(f)` | M8 | `PerformanceTracker.calculate_single()` | 单组合绩效 |
+| `pfn(f)` | M8 | `PerformanceTracker.calculate_total()` | 总绩效汇总 |
+| `cpbf(f)` | M8 | `PerformanceTracker.buffett_distance()` | 巴菲特距离 |
+| `ddlet(f)` | M8 | `PerformanceTracker._remove_marked()` | 删除标 X 行 |
+| `tax()` | M9 | `TaxCalculator.import_tax_file()` | 导入外部税务文件 |
+| `exdiv()` | M9 | `TaxCalculator.calculate_dividend_tax()` | 除息税主逻辑 |
+| `taxtb()` | M9 | `TaxCalculator.generate_tax_table()` | 税率表生成 |
+| `Macro10~14` | M6 | `IndexScreener.screen()` | 5 个 → 1 个参数化 |
+| `fm6` / 排序函数 | M6 | `IndexScreener.sort_results()` | 12 个排序 → 1 个 |
+
+: 业务逻辑层映射 {#tbl-biz-mapping}
+
+## 工具层（大幅简化）
+
+| VBA 函数 | Python 替代 | 说明 |
+|---------|------------|------|
+| `findAll` | `StockLookup.find()` + pandas | 用 DataFrame 查找替代 Excel Range.Find |
+| `ProtectSheet` / `UnprotectSheet` | `ExcelIO.protect()` / `unprotect()` | 仅在 Excel 模式下需要 |
+| `Delete_Connection_XL2003/2007` | **删除** | Python 不产生 QueryTable 连接 |
+| `QueryTablesDelete` | **删除** | 同上 |
+| `Delete_Pictures` | **删除** | Python 不内嵌图片 |
+| `ERRLOG` | `logging.error()` | Python 标准日志 |
+| `RSURLTYPE` | `HttpClient.get()` 内置 | 负载均衡逻辑内置到 HTTP 客户端 |
+| `SEASONTF` / `YEARTF` | `pd.to_datetime()` | pandas 日期处理 |
+| `enEvt` | **删除** | Python 无 EnableEvents 概念 |
+| `Auto_open` | **删除** | Python 无需初始化标记 |
+
+: 工具层映射 {#tbl-util-mapping}
+
+
+# 可删除/优化的 VBA 逻辑 {#sec-deletable}
+
+## 完全可删除的代码
+
+基于前序分析报告（dataflow-analysis 报告 @sec-assessment），以下 VBA 代码在 Python 迁移后完全不需要：
+
+```{mermaid}
+%%| label: fig-deletable
+%%| fig-cap: "可删除的 VBA 代码分类"
+pie title 可删除代码占比估算
+    "HTTP 连接函数 (Connect*)" : 25
+    "HTML DOM 解析逻辑" : 20
+    "单位转换/代号映射" : 10
+    "Excel 连接清理" : 8
+    "已废弃函数 (hkhis/cnhis/glhis...)" : 12
+    "IE 自动化" : 5
+    "JsonConverter.bas 副本" : 5
+    "需保留并改写的业务逻辑" : 15
+```
+
+### 按类别详列
+
+| 类别 | VBA 函数/文件 | 理由 |
+|------|-------------|------|
+| **HTTP 连接** | `ConnectXMLHTTP`, `ConnectMarketWatch`, `ConnectWinHttp`, `ConnectIE`, `DelIE` | `requests` + `yfinance` 替代 |
+| **Yahoo 旧版** | `CCRUMBT`, `DCSV`, `CCRUMBT_BAK`, `DCSV_BAK` | 旧版 Yahoo crumb 机制已失效 |
+| **废弃历史方法** | `hkhis`, `cnhis`, `glhis`, `ushis`, `Yahoo_Price_Div_Split_20241111` | 已被新版 Yahoo 方法替代 |
+| **IE 自动化** | `ConnectIE`, `DelIE`, Macro12/13 的 IE 调用 | IE 已停产，Python 用 requests 即可 |
+| **Excel 清理** | `Delete_Connection_XL2003/2007/2003_2/2007_2`, `QueryTablesDelete` | Python 不产生遗留连接 |
+| **视图调整** | `Macro8/9/35/36/40` | 缩放/滚动操作不需要自动化 |
+| **单位转换** | `unitconversion`, `HandleNulls`, `splitt` | yfinance 返回原始数值，pandas 处理 NaN |
+| **代号转换** | `mkw`, `wsj` | 不再需要 MarketWatch/WSJ 格式 |
+| **重复副本** | `JsonConverter.bas`（实为 Module8 副本） | 完全无用 |
+| **Sheet 保护** | `ProtectSheet`, `UnprotectSheet` | Python 后端不操作 Sheet 保护 |
+| **初始化** | `Auto_open`, ZZ1 标记写入 | Python 无需此机制 |
+
+## 保留但改写的逻辑
+
+| 业务逻辑 | VBA 来源 | Python 改写要点 |
+|---------|---------|---------------|
+| 预期报酬率公式 | M7.w2k 内联 | 提取为 `ValuationEngine.expected_return()` |
+| 巴菲特距离公式 | M8.cpbf | 保持算法，改为 `numpy` 计算 |
+| XIRR 计算 | M8.pf (Excel 公式) | 使用 `scipy.optimize.brentq` 或 `pyxirr` |
+| 补充保费规则 (2.11%) | M9.exdiv | 提取为配置项 |
+| 台股代号查找 | shared.findAll | pandas DataFrame 查找 |
+| 市场代号映射 | M5.yhondd | 配置字典 |
+
+
+# 数据源策略 {#sec-datasource}
+
+## API 优先替代方案
+
+```{mermaid}
+%%| label: fig-datasource
+%%| fig-cap: "数据源替代策略：HTML抓取 → API"
+%%| fig-width: 100%
+graph TB
+    subgraph before["VBA 现状：10+ 个 HTML 数据源"]
+        direction TB
+        B_MDJ["MoneyDJ<br/>HTML 抓取<br/>❌ 脆弱"]
+        B_MW["MarketWatch<br/>QueryTables<br/>❌ 脆弱"]
+        B_WSJ["WSJ<br/>XMLHTTP<br/>❌ 脆弱"]
+        B_YF["Yahoo Finance<br/>CSV/JSON<br/>⚠️ 半稳定"]
+        B_AA["AAStocks<br/>QueryTables<br/>❌ 脆弱"]
+        B_SINA["Sina Finance<br/>QueryTables<br/>❌ 脆弱"]
+        B_FV["Finviz<br/>QueryTables<br/>❌ 脆弱"]
+        B_INV["Investing.com<br/>IE 自动化<br/>❌ 已失效"]
+        B_WISE["Wise.com<br/>WinHttp<br/>⚠️ 半稳定"]
+    end
+
+    subgraph after["Python 方案：3 个稳定数据源"]
+        direction TB
+        A_YF["yfinance<br/><small>✅ 美/港/中/全球</small><br/><small>财报 + 历史价格 + 股息</small><br/><small>自动拆股调整</small>"]
+        A_TW["TWSE/TPEX 官方<br/><small>✅ 台股专用</small><br/><small>requests + BeautifulSoup</small><br/><small>MoneyDJ 作为备选</small>"]
+        A_FX["yfinance 汇率<br/><small>✅ 汇率</small><br/><small>Ticker('USDTWD=X')</small><br/><small>ECB 作为备选</small>"]
+    end
+
+    B_MW -->|"替代"| A_YF
+    B_WSJ -->|"替代"| A_YF
+    B_YF -->|"升级"| A_YF
+    B_AA -->|"替代"| A_YF
+    B_SINA -->|"替代"| A_YF
+    B_FV -->|"替代"| A_YF
+    B_INV -->|"替代"| A_YF
+    B_MDJ -->|"部分替代"| A_TW
+    B_WISE -->|"替代"| A_FX
+
+    style before fill:#ffcdd2,stroke:#c62828
+    style after fill:#c8e6c9,stroke:#2e7d32
+```
+
+## yfinance 能力矩阵
+
+| 数据类型 | VBA 来源 | yfinance API | 覆盖市场 | 备注 |
+|---------|---------|-------------|---------|------|
+| 历史日线 | Yahoo CSV/JSON | `Ticker.history(period="10y")` | 全市场 | 含拆股调整 |
+| 损益表 | MarketWatch/MoneyDJ | `Ticker.income_stmt` | 美/港/中/全球 | 年度 |
+| 季度损益表 | MarketWatch/MoneyDJ | `Ticker.quarterly_income_stmt` | 美/港/中/全球 | 季度 |
+| 资产负债表 | MarketWatch/MoneyDJ | `Ticker.balance_sheet` | 美/港/中/全球 | 年度 |
+| 现金流量表 | MarketWatch | `Ticker.cashflow` | 美/港/中/全球 | 年度 |
+| 股息历史 | Yahoo CSV | `Ticker.dividends` | 全市场 | 含除息日 |
+| 拆股历史 | Yahoo CSV | `Ticker.splits` | 全市场 | — |
+| 公司概况 | MarketWatch/AAStocks | `Ticker.info` | 全市场 | 含市值/PE/行业 |
+| 汇率 | Wise.com | `Ticker("USDTWD=X").history()` | — | 实时+历史 |
+| 指数成分股 | Finviz/Investing | **不支持** | — | 需自行抓取或用替代 |
+
+: yfinance 能力矩阵 {#tbl-yf-matrix}
+
+::: {.callout-warning}
+## yfinance 的局限
+1. **台股季度财报覆盖不完整** — 需保留 MoneyDJ/TWSE 作为台股数据源
+2. **指数成分股不支持** — 需从交易所官网或第三方获取
+3. **无官方 SLA** — 免费 API，可能被限速或变更
+4. **台股月营收不提供** — 需从 TWSE/TPEX 官方获取
+:::
+
+## 台股数据源备选方案
+
+| 数据 | 首选来源 | 备选来源 | Python 库 |
+|------|---------|---------|----------|
+| 台股季度/年度财报 | TWSE MOPS | MoneyDJ HTML | requests + BeautifulSoup |
+| 月营收 | TWSE/TPEX 官网 | GoodInfo | requests |
+| 台股代号清单 | TWSE OpenAPI | TPEX OpenAPI | requests (JSON) |
+| 台股历史日线 | yfinance (.TW) | TWSE CSV | yfinance |
+| OTC 月统计 | TPEX 官网 | — | requests |
+| 除息日/股利 | TWSE MOPS | MoneyDJ | requests |
+
+
+# 反爬策略 {#sec-anti-scraping}
+
+::: {.callout-important}
+## 为什么需要反爬策略？
+VBA 原系统使用 `On Error Resume Next` 忽略所有网络错误。
+一旦被目标网站限速或封锁，数据静默缺失，用户完全不知情。
+Python 系统必须主动应对反爬机制，确保数据可靠性。
+:::
+
+## 策略矩阵
+
+```{mermaid}
+%%| label: fig-anti-scraping
+%%| fig-cap: "反爬防御 — 多层策略"
+graph LR
+    subgraph L1["第一层：礼貌请求"]
+        RATE["请求限速<br/><small>1~2 秒间隔</small>"]
+        UA["User-Agent 轮换<br/><small>随机浏览器 UA</small>"]
+        HEADER["完整 HTTP 头<br/><small>Referer / Accept / Language</small>"]
+    end
+
+    subgraph L2["第二层：缓存避免"]
+        CACHE_L["本地缓存<br/><small>SQLite TTL 缓存</small>"]
+        DEDUP["请求去重<br/><small>相同代号 24h 内不重复</small>"]
+    end
+
+    subgraph L3["第三层：故障恢复"]
+        RETRY["指数退避重试<br/><small>tenacity 库</small>"]
+        FALLBACK["数据源降级<br/><small>yfinance → TWSE → MoneyDJ</small>"]
+        ALERT["日志告警<br/><small>连续失败 → 通知用户</small>"]
+    end
+
+    L1 --> L2 --> L3
+
+    style L1 fill:#e8f5e9,stroke:#388e3c
+    style L2 fill:#fff3e0,stroke:#f57c00
+    style L3 fill:#ffcdd2,stroke:#c62828
+```
+
+## HttpClient 设计要点
+
+```python
+# src/yinzaibiao/utils/http_client.py — 核心设计
+
+class HttpClient:
+    """统一 HTTP 客户端，替代 VBA 的 4 种连接方式。"""
+
+    def __init__(self, config: dict):
+        self.session = requests.Session()
+        self.rate_limiter = RateLimiter(
+            calls_per_second=0.5  # 每 2 秒最多 1 次请求
+        )
+        self.cache = SQLiteCache(ttl_hours=24)
+        self.user_agents = [...]  # UA 池
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(min=2, max=30),
+        retry=retry_if_exception_type(requests.RequestException)
+    )
+    def get(self, url: str, **kwargs) -> requests.Response:
+        """带限速、缓存、重试的 GET 请求。"""
+        # 1. 检查缓存
+        # 2. 限速等待
+        # 3. 设置随机 UA + 完整头
+        # 4. 发送请求
+        # 5. 写入缓存
+        # 6. 返回响应
+        ...
+```
+
+## VBA 旧方法 vs Python 新方法对比
+
+| 维度 | VBA (ConnectXMLHTTP 等) | Python (HttpClient) |
+|------|------------------------|-------------------|
+| 限速 | 无 | 可配置（默认 0.5 req/s） |
+| 重试 | 无（On Error Resume Next） | 指数退避，最多 3 次 |
+| 缓存 | 无（每次都重新请求） | SQLite 缓存，TTL 可配置 |
+| User-Agent | 固定或无 | 随机轮换池 |
+| 错误处理 | 静默忽略 | 结构化日志 + 用户通知 |
+| 超时 | 依赖 COM 默认值 | 可配置（默认 30 秒） |
+| 并发 | 串行执行 | 可扩展为 asyncio 并发 |
+
+
+# 核心模块伪代码 {#sec-pseudocode}
+
+## 数据层：YFinanceProvider
+
+```python
+# src/yinzaibiao/data_providers/yfinance_provider.py
+
+from dataclasses import dataclass
+import yfinance as yf
+import pandas as pd
+
+# 交易所后缀映射（替代 VBA yhondd 函数）
+EXCHANGE_SUFFIX = {
+    "TW": ".TW",   "TWO": ".TWO",  # 台股上市/上柜
+    "HK": ".HK",                    # 港股
+    "CN_SH": ".SS", "CN_SZ": ".SZ", # 中股
+    "JP": ".T",    "UK": ".L",      # 日/英
+    "AU": ".AX",   "KR": ".KS",     # 澳/韩
+    "FR": ".PA",   "CA": ".TO",     # 法/加
+    "US": "",                        # 美股无后缀
+}
+
+class YFinanceProvider:
+    """统一数据提供者 — 替代 Module2~5 的数据抓取逻辑。"""
+
+    def __init__(self, cache: CacheManager, http: HttpClient):
+        self.cache = cache
+        self.http = http
+
+    def get_ticker(self, code: str, market: str) -> yf.Ticker:
+        suffix = EXCHANGE_SUFFIX.get(market, "")
+        return yf.Ticker(f"{code}{suffix}")
+
+    def get_history(self, code: str, market: str,
+                    period: str = "10y") -> pd.DataFrame:
+        """替代: Yahoo_Price_Dividend_Split + highlow + splitt。
+        yfinance 自动返回拆股调整价格，无需手动调整。"""
+        ticker = self.get_ticker(code, market)
+        return ticker.history(period=period)
+
+    def get_financials(self, code: str, market: str) -> dict:
+        """替代: ConnectMarketWatch 的财报抓取。
+        返回 {income_stmt, balance_sheet, cashflow} 的 DataFrame 字典。"""
+        ticker = self.get_ticker(code, market)
+        return {
+            "income_stmt": ticker.income_stmt,
+            "quarterly_income_stmt": ticker.quarterly_income_stmt,
+            "balance_sheet": ticker.balance_sheet,
+            "quarterly_balance_sheet": ticker.quarterly_balance_sheet,
+            "cashflow": ticker.cashflow,
+        }
+
+    def get_dividends(self, code: str, market: str) -> pd.Series:
+        """替代: Yahoo CSV 股息下载。"""
+        return self.get_ticker(code, market).dividends
+
+    def get_info(self, code: str, market: str) -> dict:
+        """替代: ConnectMarketWatch 公司概况 + ConnectWinHttp 市值。"""
+        return self.get_ticker(code, market).info
+
+    def get_fx_rate(self, from_ccy: str, to_ccy: str = "TWD") -> float:
+        """替代: ConnectWinHttp(wise_url) 汇率抓取。"""
+        pair = f"{from_ccy}{to_ccy}=X"
+        ticker = yf.Ticker(pair)
+        hist = ticker.history(period="1d")
+        return hist["Close"].iloc[-1]
+```
+
+## 业务层：PerformanceTracker
+
+```python
+# src/yinzaibiao/analyzers/performance.py
+
+import numpy as np
+from scipy.optimize import brentq
+
+class PerformanceTracker:
+    """替代 Module8 — 绩效追踪 + 巴菲特距离。"""
+
+    BUFFETT_ANNUAL_RETURN = 0.20   # 巴菲特 50 年 20%
+    BUFFETT_YEARS = 50
+    BUFFETT_MULTIPLIER = 1.20 ** 50  # ≈ 9,100
+    NORMALIZE_BASE = 3_701          # 8年12%基准
+
+    def calculate_xirr(self, cashflows: list[tuple]) -> float:
+        """替代 VBA 的 Excel XIRR 公式。
+        cashflows: [(date, amount), ...] — 负数=买入，正数=卖出/现值
+        """
+        dates, amounts = zip(*cashflows)
+        # 转换为年份差
+        d0 = min(dates)
+        years = [(d - d0).days / 365.25 for d in dates]
+
+        def npv(rate):
+            return sum(a / (1 + rate) ** y
+                      for a, y in zip(amounts, years))
+
+        return brentq(npv, -0.99, 10.0)
+
+    def buffett_distance(self, annual_return: float,
+                         invest_years: float) -> float:
+        """替代 VBA cpbf() — 巴菲特距离公式。
+        Distance = 100 × √A × B / 3701
+        A = 1.2^(50 - invest_years)
+        B = log(9100) / log(1 + annual_return)
+        """
+        A = 1.2 ** (self.BUFFETT_YEARS - invest_years)
+        if annual_return <= 0:
+            return float('inf')
+        B = np.log(self.BUFFETT_MULTIPLIER) / np.log(1 + annual_return)
+        return 100 * np.sqrt(A) * B / self.NORMALIZE_BASE
+
+    def evaluate(self, distance: float) -> str:
+        """巴菲特距离评级。"""
+        if distance <= 21:
+            return "堪比巴菲特！"
+        elif distance <= 100:
+            return "太棒了！"
+        elif distance <= 168:
+            return "加油！"
+        else:
+            return "常读讲义"
+```
+
+## 业务层：ValuationEngine
+
+```python
+# src/yinzaibiao/analyzers/valuation.py
+
+class ValuationEngine:
+    """替代 Module7.w2k 中内联的估值逻辑。"""
+
+    HOLD_YEARS = 8  # 投资年限假设
+
+    def expected_annual_return(self, base_return: float,
+                                current_price: float,
+                                reference_price: float) -> float:
+        """预期年化报酬率 = 基础报酬率 - [(当前价/基准价)^(1/8) - 1]"""
+        price_growth = (current_price / reference_price) ** (
+            1 / self.HOLD_YEARS) - 1
+        return base_return - price_growth
+
+    def price_zone(self, expected_return: float) -> str:
+        """便宜价/合理价/昂贵价 三区间判断。"""
+        if expected_return > 0.15:
+            return "便宜（买入区）"
+        elif expected_return > 0.08:
+            return "合理（持有区）"
+        else:
+            return "昂贵（卖出区）"
+```
+
+
+# 重构优先级路线图 {#sec-roadmap}
+
+## 四阶段实施计划
+
+```{mermaid}
+%%| label: fig-roadmap
+%%| fig-cap: "Python 重构四阶段路线图"
+%%| fig-width: 100%
+gantt
+    title Python 重构路线图
+    dateFormat YYYY-MM-DD
+    axisFormat %m月
+
+    section Phase 1: 数据层
+    项目初始化 (pyproject.toml + 结构)          :done, p1a, 2026-03-01, 3d
+    HttpClient + CacheManager                   :p1b, after p1a, 5d
+    YFinanceProvider (美/港/中/全球)              :crit, p1c, after p1b, 7d
+    TWMarketProvider (台股 TWSE/TPEX)            :p1d, after p1b, 10d
+    FXProvider (汇率)                           :p1e, after p1c, 3d
+    数据层单元测试                                :p1f, after p1e, 5d
+
+    section Phase 2: 业务层
+    StockAnalyzer (单股查询)                     :crit, p2a, after p1f, 5d
+    ValuationEngine (估值模型)                    :p2b, after p2a, 3d
+    PortfolioManager (组合管理)                   :p2c, after p2b, 7d
+    PerformanceTracker (XIRR + 巴菲特距离)       :p2d, after p2b, 5d
+    IndexScreener (指数选股)                      :p2e, after p2a, 5d
+    TaxCalculator (台股税务)                      :p2f, after p2a, 3d
+    业务层单元测试                                :p2g, after p2f, 5d
+
+    section Phase 3: 表现层
+    CLI 工具 (python -m yinzaibiao)              :p3a, after p2g, 5d
+    xlwings UDF 集成                             :p3b, after p3a, 7d
+    openpyxl Excel 写入器                        :p3c, after p3a, 5d
+    ExcelFormatter (格式化)                       :p3d, after p3c, 3d
+    集成测试                                      :p3e, after p3d, 5d
+
+    section Phase 4: 优化
+    性能优化 (并发请求)                            :p4a, after p3e, 5d
+    数据库存储 (SQLite → PostgreSQL 可选)          :p4b, after p3e, 5d
+    Web Dashboard (Streamlit, 可选)              :p4c, after p4b, 10d
+    文档 + 部署指南                                :p4d, after p4c, 5d
+```
+
+## 各阶段详细说明
+
+### Phase 1: 数据层（最高优先级）
+
+**目标：** 用 Python 完全替代 VBA 的 HTTP 抓取 + 数据解析逻辑。
+
+| 任务 | 替代的 VBA 代码 | 预期成果 |
+|------|---------------|---------|
+| YFinanceProvider | Module2~5 的 Yahoo 相关函数（~60%代码） | 一个类替代 4 个 Module |
+| TWMarketProvider | Module1 的 TSECFSQT/TWReport/OTC | 台股数据独立 Provider |
+| HttpClient | ConnectXMLHTTP/ConnectWinHttp/ConnectMarketWatch/ConnectIE | 1 个类替代 4 种 COM 连接 |
+| CacheManager | 无（VBA 无缓存） | **新增能力** — 减少 90% 重复请求 |
+
+::: {.callout-tip}
+## Phase 1 完成标志
+能通过 Python 获取任意市场（台/美/港/中/全球）的完整财务数据，并输出为 pandas DataFrame。
+此阶段 VBA 系统仍正常运行，Python 仅作为数据获取的备选通道。
+:::
+
+### Phase 2: 业务层
+
+**目标：** 将 VBA 中硬编码的业务规则提取为可测试的 Python 类。
+
+关键业务规则迁移：
+
+- 预期报酬率公式 → `ValuationEngine`
+- 巴菲特距离公式 → `PerformanceTracker.buffett_distance()`
+- XIRR 计算 → `scipy.optimize.brentq`（替代 Excel XIRR 公式）
+- 补充保费 2.11% → `TaxCalculator`（阈值提取为配置项）
+- 收藏排序（6 种）→ `PortfolioManager.sort_by(key=...)`
+
+### Phase 3: 表现层
+
+**目标：** Python 后端与 Excel 前端的集成。
+
+两种集成模式：
+
+| 模式 | 工具 | 适用场景 |
+|------|------|---------|
+| **xlwings UDF** | xlwings | 实时交互 — 在 Excel 中输入代号即触发 Python |
+| **openpyxl 批量写入** | openpyxl | 离线生成 — Python 脚本批量更新 Excel 文件 |
+
+```python
+# xlwings UDF 示例 — 替代 Sheet1.Worksheet_Change + Macro1
+import xlwings as xw
+
+@xw.func
+def query_stock(code: str, market: str = "TW"):
+    """在 Excel 中输入 =query_stock("2330", "TW") 即可触发。"""
+    analyzer = StockAnalyzer()
+    result = analyzer.full_analysis(code, market)
+    return result.to_excel_range()  # 返回 DataFrame 写入
+```
+
+### Phase 4: 优化（可选）
+
+- **并发请求：** `asyncio` + `aiohttp` 批量更新时并行抓取
+- **Web Dashboard：** Streamlit 单页应用，替代 Excel 前端
+- **数据库：** SQLite → PostgreSQL 升级（多用户场景）
+
+
+# 技术栈与依赖 {#sec-tech-stack}
+
+## pyproject.toml 核心依赖
+
+```toml
+[project]
+name = "yinzaibiao"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+dependencies = [
+    # 数据获取
+    "yfinance>=0.2.36",       # Yahoo Finance API 封装
+    "requests>=2.31",          # HTTP 客户端
+    "beautifulsoup4>=4.12",    # HTML 解析（台股专用）
+    "lxml>=5.0",               # HTML/XML 解析器
+
+    # 数据处理
+    "pandas>=2.1",             # DataFrame 核心
+    "numpy>=1.26",             # 数值计算
+
+    # 财务计算
+    "pyxirr>=0.10",            # XIRR 高性能计算（Rust 实现）
+
+    # Excel 集成
+    "openpyxl>=3.1",           # Excel 读写（纯 Python）
+    "xlwings>=0.30",           # Excel 实时交互（需安装 Excel）
+
+    # 基础设施
+    "tenacity>=8.2",           # 重试机制
+    "pyyaml>=6.0",             # 配置文件
+    "python-dotenv>=1.0",      # 环境变量
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+    "pytest-cov>=4.1",
+    "ruff>=0.3",               # Linter + Formatter
+    "mypy>=1.8",               # 类型检查
+]
+web = [
+    "streamlit>=1.30",         # Web Dashboard（可选）
+]
+
+[project.scripts]
+yinzaibiao = "yinzaibiao.__main__:main"
+```
+
+## 与现有 Python 环境的关系
+
+当前项目已有的 Python 基础设施：
+
+| 已有 | 状态 | 计划 |
+|------|------|------|
+| Python 3.13.5 | 已安装 | 继续使用 |
+| venv | 已配置 | 继续使用 |
+| yfinance | 已安装在 venv | 升级到最新版 |
+| openpyxl | 已安装 | 继续使用 |
+| xlwings | 已安装 | 继续使用 |
+| pandas | 已安装 | 继续使用 |
+| yfinance_demo.py | 概念验证 | 演化为 YFinanceProvider |
+
+::: {.callout-note}
+## 现有代码可复用
+`yfinance_demo.py` 已验证了 yfinance 的基本可用性。
+重构时可直接将其逻辑迁移到 `YFinanceProvider` 类中。
+:::
+
+
+# 风险与应对 {#sec-risks}
+
+## 风险矩阵
+
+| 风险 | 概率 | 影响 | 应对策略 |
+|------|:----:|:----:|---------|
+| yfinance API 被限速/变更 | 中 | 高 | 本地缓存 + 多数据源降级 |
+| 台股专用数据源（MoneyDJ）改版 | 高 | 中 | BeautifulSoup 解析 + TWSE 备选 |
+| xlwings macOS 兼容性问题 | 低 | 中 | 提供 openpyxl 纯 Python 备选 |
+| XIRR 计算精度与 Excel 不一致 | 低 | 低 | 使用 pyxirr 库（与 Excel 算法一致） |
+| 迁移期间 VBA 和 Python 数据不一致 | 中 | 中 | 对比测试脚本，逐模块验证 |
+
+## 迁移期间的共存策略
+
+```{mermaid}
+%%| label: fig-coexist
+%%| fig-cap: "VBA + Python 渐进迁移策略"
+%%| fig-width: 100%
+stateDiagram-v2
+    [*] --> Phase1: 开始
+
+    state Phase1 {
+        VBA1: VBA 系统正常运行
+        PY1: Python 数据层开发中
+        VBA1 --> PY1: 并行
+    }
+    note right of Phase1: VBA 仍是主系统\nPython 仅做数据验证
+
+    Phase1 --> Phase2: 数据层完成
+
+    state Phase2 {
+        VBA2: VBA 前端仍在用
+        PY2: Python 后端提供数据
+        VBA2 --> PY2: xlwings 桥接
+    }
+    note right of Phase2: Python 数据\n通过 xlwings 注入 Excel
+
+    Phase2 --> Phase3: 业务层完成
+
+    state Phase3 {
+        CLI3: Python CLI 可独立使用
+        EXCEL3: Excel 通过 xlwings 调 Python
+        CLI3 --> EXCEL3: 二者并行
+    }
+    note right of Phase3: 用户可选择\nCLI 或 Excel
+
+    Phase3 --> Phase4: 表现层完成
+
+    state Phase4 {
+        FULL: Python 完全替代 VBA
+        LEGACY: VBA 代码归档保留
+    }
+    note right of Phase4: VBA 代码不再执行\n仅保留作参考
+
+    Phase4 --> [*]
+```
+
+
+# 附录 {#sec-appendix}
+
+## A. 完整 VBA → Python 映射速查表
+
+| VBA 函数 | Module | Python 替代 | 状态 |
+|---------|--------|------------|:----:|
+| `Macro1` | M1 | `StockAnalyzer.analyze("TW")` | 改写 |
+| `Macro2` | M2 | `StockAnalyzer.analyze("US")` | 改写 |
+| `Macro3` | M3 | `StockAnalyzer.analyze("HK")` | 改写 |
+| `Macro4` | M4 | `StockAnalyzer.analyze("CN")` | 改写 |
+| `Macro5` | M5 | `StockAnalyzer.analyze("Global")` | 改写 |
+| `ConnectXMLHTTP` | M2 | `HttpClient.get()` | 替代 |
+| `ConnectMarketWatch` | M2 | `YFinanceProvider` | 替代 |
+| `ConnectWinHttp` | M2 | `HttpClient.get()` | 替代 |
+| `ConnectIE` | M2 | 删除 | 删除 |
+| `Yahoo_Price_*` ×4 | M2~5 | `YFinanceProvider.get_history()` | 合并 |
+| `highlow` | M2 | 不再需要（yfinance 自动调整） | 删除 |
+| `unitconversion` | M2 | 不再需要（yfinance 原始数值） | 删除 |
+| `splitt` | M2 | 不再需要 | 删除 |
+| `HandleNulls` | M2 | `pd.DataFrame.fillna()` | 删除 |
+| `mkw`/`yho`/`wsj` | M2 | 不再需要（统一 yfinance 格式） | 删除 |
+| `yhondd` | M5 | `EXCHANGE_SUFFIX` 字典 | 简化 |
+| `TSECFSQT` | M1 | `TWMarketProvider.query_tables()` | 改写 |
+| `TWReport` | M1 | `TWMarketProvider.get_report()` | 改写 |
+| `OTC` | M1 | `TWMarketProvider.get_otc_monthly()` | 改写 |
+| `Stocklist` | shared | `TWMarketProvider.get_stock_list()` | 改写 |
+| `findAll` | shared | `StockLookup.find()` + pandas | 改写 |
+| `ProtectSheet` | shared | `ExcelIO.protect()` | 改写 |
+| `Macro10~14` | M6 | `IndexScreener.screen(index=...)` | 合并 |
+| `Macro15~19` | M7 | `PortfolioManager.save_stock(market=...)` | 合并 |
+| `Macro20` | M7 | `PortfolioManager.batch_update()` | 改写 |
+| `Macro21~29` | M7 | `PortfolioManager.sort_by(key=...)` | 合并 |
+| `Macro30` | M8 | `PerformanceTracker.calculate_all()` | 改写 |
+| `pf`/`pfn` | M8 | `PerformanceTracker.calculate_*()` | 改写 |
+| `cpbf` | M8 | `PerformanceTracker.buffett_distance()` | 改写 |
+| `tax`/`exdiv`/`taxtb` | M9 | `TaxCalculator.*()` | 改写 |
+| `CCRUMBT`/`DCSV` | M2 | 删除（已废弃） | 删除 |
+| `hkhis`/`cnhis`/`glhis` | M3~5 | 删除（已废弃） | 删除 |
+| `Delete_Connection_*` | shared | 删除（Python 无此需求） | 删除 |
+| `QueryTablesDelete` | ThisWB | 删除 | 删除 |
+| `Delete_Pictures` | M7 | 删除 | 删除 |
+| `JsonConverter.bas` | — | 删除（M8 副本） | 删除 |
+| `ERRLOG` | M1 | `logging.error()` | 替代 |
+| `RSURLTYPE` | M1 | `HttpClient` 内置负载均衡 | 替代 |
+| `SEASONTF`/`YEARTF` | M1 | `pd.to_datetime()` | 替代 |
+| `Auto_open`/`enEvt` | shared | 删除 | 删除 |
+| `Macro8/9/35/36/40` | M1/M7/M8 | 删除（视图缩放） | 删除 |
+
+: 完整 VBA → Python 映射速查表 {#tbl-full-mapping}
+
+## B. 相关分析报告索引
+
+本文档基于以下五份分析报告的发现：
+
+| # | 报告 | 文件 | 核心贡献 |
+|:-:|------|------|---------|
+| 1 | 系统架构逆向分析 | `architecture-report.qmd` | 系统概览、Sheet-Module 映射、五层架构 |
+| 2 | 核心模块深度分析 | `module-analysis.qmd` | 90+ 函数清单、调用拓扑、依赖矩阵 |
+| 3 | 业务逻辑解读 | `business-logic.qmd` | 业务规则提取、估值模型、巴菲特距离 |
+| 4 | 数据流分析 | `dataflow-analysis.qmd` | 5 阶段管线、函数价值评估、可删除清单 |
+| 5 | 事件入口分析 | `event-entry-analysis.qmd` | 8 个事件处理器、启动序列、异常发现 |
+
+: 前序分析报告索引 {#tbl-reports}

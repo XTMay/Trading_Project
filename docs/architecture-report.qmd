@@ -1,0 +1,599 @@
+---
+title: "盈再表 VBA 系统架构逆向分析报告"
+subtitle: "Excel VBA 遗留系统 — 多市场股票财务分析工具"
+author: "Trading Project Team"
+date: today
+date-format: "YYYY-MM-DD"
+lang: zh
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "目录"
+    number-sections: true
+    code-fold: true
+    theme: cosmo
+    fontsize: "1rem"
+    mainfont: "PingFang SC, Microsoft YaHei, sans-serif"
+  pdf:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    documentclass: article
+    geometry: "margin=2.5cm"
+    mainfont: "PingFang SC"
+    CJKmainfont: "PingFang SC"
+execute:
+  echo: false
+---
+
+# 系统概览 {#sec-overview}
+
+**盈再表**是一个基于 Excel VBA 的多市场股票财务分析系统，原始文件为 `盈再表250723.xlsm`。
+系统覆盖五大股票市场，具备数据抓取、财报分析、投资组合管理、绩效追踪及税务计算等功能。
+
+::: {.callout-note}
+## 文件编码说明
+原始 `.bas` / `.cls` 导出文件采用 **Big5（繁体中文）** 编码，已批量转换为 UTF-8。
+原始备份保存于各目录下的 `_backup_big5/` 文件夹中。
+:::
+
+## 核心功能
+
+| 功能域 | 说明 |
+|--------|------|
+| 多市场数据抓取 | 台股、美股、港股、中股、全球（10+ 数据源） |
+| 财报解析 | 季度/年度损益表、资产负债表、现金流量表 |
+| 投资组合管理 | 保存、更新、排名、巴菲特基准对比 |
+| 绩效追踪 | XIRR 内部收益率、多币种换算 |
+| 指数选股 | 台股加权/S&P 500/日经225/恒生/沪深180 成分股 |
+| 税务计算 | 台股除息税、补充保费 |
+
+: 系统功能概览 {#tbl-features}
+
+## Excel Sheet 结构
+
+工作簿包含 **13 个工作表**，按功能分为三组：
+
+::: {.panel-tabset}
+
+### 市场分析（核心）
+
+| Sheet 名称 | 用途 | 对应 VBA Module |
+|------------|------|----------------|
+| 台股 | 台湾股票分析 | Module1 + Sheet1 |
+| 美股 | 美国股票分析 | Module2 + Sheet2 |
+| 港股 | 香港股票分析 | Module3 + Sheet3 |
+| 中股 | 中国A股分析 | Module4 + Sheet4 |
+| 全球 | 其他全球市场 | Module5 + Sheet5 |
+
+### 投资管理
+
+| Sheet 名称 | 用途 | 对应 VBA Module |
+|------------|------|----------------|
+| 收藏 | 投资组合（保存的股票清单） | Module7 |
+| 績效 | 绩效追踪与回报计算 | Module8 |
+| 報稅 | 股息税务计算 | Module9 |
+| 實現 | 已实现损益 | — |
+| 匯回 | 资金汇回记录 | — |
+
+### 系统辅助
+
+| Sheet 名称 | 用途 | 对应 VBA Module |
+|------------|------|----------------|
+| 安裝 | 安装说明与系统配置 | — |
+| 介紹 | 功能介绍与使用指南 | — |
+| 工作表1 | 股票代号数据库（Stocklist） | — |
+
+:::
+
+
+# 项目文件清单 {#sec-files}
+
+## 文件目录结构
+
+```
+Excel/
+├── 盈再表250723.xlsm            ← 主工作簿
+├── Forms/
+│   ├── UserForm1.frm / .frx     ← 空壳表单（无运行时逻辑）
+│   ├── UserForm2.frm / .frx
+│   ├── UserForm3.frm / .frx
+│   ├── UserForm4.frm / .frx
+│   └── UserForm5.frm / .frx
+├── Modules/
+│   ├── Module1.bas              ← 台股数据抓取
+│   ├── Module2.bas              ← 美股数据抓取
+│   ├── Module3.bas              ← 港股数据抓取
+│   ├── Module4.bas              ← 中股数据抓取
+│   ├── Module5.bas              ← 全球数据抓取
+│   ├── Module6.bas              ← 指数选股
+│   ├── Module7.bas              ← 组合管理
+│   ├── Module8.bas              ← 绩效追踪
+│   ├── Module9.bas              ← 税务计算
+│   ├── shared_modules.bas       ← 公共工具函数
+│   ├── JsonConverter.bas        ← 第三方 JSON 解析库
+│   └── _backup_big5/            ← Big5 原始编码备份
+└── Objects/
+    ├── ThisWorkbook_7.cls       ← 工作簿事件（唯一有代码的 ThisWorkbook）
+    ├── ThisWorkbook_1~6.cls     ← 空壳
+    ├── Sheet1.cls               ← 台股 Sheet 事件
+    ├── Sheet2.cls               ← 美股 Sheet 事件
+    ├── Sheet3.cls               ← 港股 Sheet 事件
+    ├── Sheet4.cls               ← 中股 Sheet 事件
+    ├── Sheet5.cls               ← 全球 Sheet 事件
+    ├── Sheet01.cls, Sheet6~9.cls  ← 空壳
+    ├── Worksheet___1~6.cls      ← 空壳
+    └── _backup_big5/            ← Big5 原始编码备份
+```
+
+## 文件详细职责
+
+| 文件 | VB_Name | 代码行数级别 | 职责概述 |
+|------|---------|-------------|---------|
+| `ThisWorkbook_7.cls` | ThisWorkbook | 小 | 工作簿 Open/BeforeSave 事件；禁用自动恢复、清理连接 |
+| `Sheet1.cls` | Sheet1 | 小 | `Worksheet_Change` → `findAll()` 查找股票 → `Macro1` |
+| `Sheet2~5.cls` | Sheet2~5 | 小 | `Worksheet_Change` → 调用对应 `Macro2~5` |
+| `Module1.bas` | Module1 | 大 | 台股：TWSE/OTC/MoneyDJ，11种财务数据抓取 |
+| `Module2.bas` | Module2 | 大 | 美股：MarketWatch/WSJ/Yahoo Finance/SeekingAlpha |
+| `Module3.bas` | Module3 | 中 | 港股：AAStocks/Yahoo Finance/Wise 汇率 |
+| `Module4.bas` | Module4 | 中 | 中股：Sina Finance/AAStocks/Yahoo Finance |
+| `Module5.bas` | Module5 | 大 | 全球：WSJ/Yahoo Finance，支持 US/HK/JP/UK/FR/CA/AU/KR 等 |
+| `Module6.bas` | Module6 | 中 | 指数成分股抓取 + PE 排序筛选 |
+| `Module7.bas` | Module7 | 中 | 组合 CRUD + 批量更新 + 巴菲特基准排名 |
+| `Module8.bas` | Module8 | 中 | XIRR 绩效 + 多币种 + 巴菲特距离公式 |
+| `Module9.bas` | Module9 | 小 | 除息税/补充保费/KY股处理 |
+| `shared_modules.bas` | shared_modules | 中 | `findAll`/`Stocklist`/`ProtectSheet`/连接清理 |
+| `JsonConverter.bas` | JsonConverter | 大 | 第三方库：VBA-JSON（Tim Hall） |
+| `UserForm1~5.frm` | UserForm1~5 | 无 | 空壳表单，控件存于 `.frx` 二进制文件 |
+
+: 文件职责详细列表 {#tbl-files}
+
+
+# 分层架构 {#sec-layers}
+
+系统没有显式的架构设计，但根据代码职责可归纳为五层：
+
+```{mermaid}
+%%| label: fig-layers
+%%| fig-cap: "系统分层架构图"
+%%| fig-width: 100%
+graph TB
+    subgraph entry["入口层 — 事件触发"]
+        WB["ThisWorkbook_7.cls<br/>Workbook_Open / BeforeSave"]
+        S1["Sheet1.cls — 台股"]
+        S2["Sheet2.cls — 美股"]
+        S3["Sheet3.cls — 港股"]
+        S4["Sheet4.cls — 中股"]
+        S5["Sheet5.cls — 全球"]
+        AUTO["shared_modules.Auto_open()"]
+    end
+
+    subgraph biz["业务逻辑层"]
+        M7["Module7 — 组合管理"]
+        M8["Module8 — 绩效追踪"]
+        M9["Module9 — 税务计算"]
+        M6["Module6 — 指数选股"]
+    end
+
+    subgraph data["数据抓取层"]
+        M1["Module1 — 台股<br/>TWSE / OTC / MoneyDJ"]
+        M2["Module2 — 美股<br/>MarketWatch / WSJ / Yahoo"]
+        M3["Module3 — 港股<br/>AAStocks / Yahoo"]
+        M4["Module4 — 中股<br/>Sina / AAStocks"]
+        M5["Module5 — 全球<br/>WSJ / Yahoo"]
+    end
+
+    subgraph util["工具函数层"]
+        SM["shared_modules.bas<br/>findAll / Stocklist / Protect"]
+        JC["JsonConverter.bas<br/>JSON 解析"]
+        HLP["各 Module 内部工具函数<br/>ConnectXMLHTTP / ConnectWinHttp<br/>highlow / wsj / yho / mkw"]
+    end
+
+    S1 -->|Macro1| M1
+    S2 -->|Macro2| M2
+    S3 -->|Macro3| M3
+    S4 -->|Macro4| M4
+    S5 -->|Macro5| M5
+
+    M7 -->|批量更新| M1
+    M7 -->|批量更新| M2
+    M7 -->|批量更新| M3
+    M7 -->|批量更新| M4
+    M7 -->|批量更新| M5
+
+    M1 --> SM
+    M2 --> SM
+    M2 --> JC
+    M3 --> SM
+    M4 --> SM
+    M5 --> SM
+
+    WB -->|初始化| SM
+
+    style entry fill:#e1f5fe,stroke:#0288d1
+    style biz fill:#fff3e0,stroke:#f57c00
+    style data fill:#e8f5e9,stroke:#388e3c
+    style util fill:#f3e5f5,stroke:#7b1fa2
+```
+
+## 各层详细说明
+
+### 入口层（事件触发）
+
+系统的所有执行均由 Excel 事件驱动，无独立启动入口。
+
+| 触发方式 | 事件 | 处理文件 | 后续调用 |
+|---------|------|---------|---------|
+| 打开工作簿 | `Workbook_Open` | ThisWorkbook_7.cls | 清理连接、禁用特性 |
+| 打开工作簿 | `Auto_open` | shared_modules.bas | 自动初始化 |
+| 编辑台股 A2 | `Worksheet_Change` | Sheet1.cls | `findAll()` → `Macro1()` |
+| 编辑美股 A2 | `Worksheet_Change` | Sheet2.cls | `Macro2()` |
+| 编辑港股 A2 | `Worksheet_Change` | Sheet3.cls | `Macro3()` |
+| 编辑中股 A2 | `Worksheet_Change` | Sheet4.cls | `Macro4()` |
+| 编辑全球 A2 | `Worksheet_Change` | Sheet5.cls | `Macro5()` |
+| 手动执行宏 | 工具栏/按钮 | Module6~9 | Macro10~30, tax, exdiv |
+
+: 事件入口总览 {#tbl-entry}
+
+### UI 层
+
+::: {.callout-important}
+## 无传统 UI 层
+`UserForm1~5.frm` 全部为空壳（代码区无逻辑，控件定义在二进制 `.frx` 中）。
+系统的实际 UI **完全依赖 Excel Sheet 单元格交互**——用户在 A2 输入股票代号即触发数据抓取。
+:::
+
+### 业务逻辑层
+
+| Module | 核心 Sub/Function | 功能 |
+|--------|-------------------|------|
+| Module7 | `Macro15~19` | 从各市场 Sheet 复制股票到收藏 |
+| Module7 | `Macro20` | 批量更新所有收藏（调用 Macro1~5） |
+| Module7 | `lst()`, `fm7()`, `addlink()` | 列表管理、格式化、超链接 |
+| Module8 | `Macro30` | 主绩效计算入口 |
+| Module8 | `pf(f)` | 单支持股绩效（XIRR） |
+| Module8 | `pfn(f)` | 组合总绩效 |
+| Module8 | `cpbf(f)` | 巴菲特距离：$100 \times \frac{A^{0.5} \times B}{3701}$ |
+| Module9 | `tax()`, `exdiv()`, `taxtb()` | 除息税/补充保费（>20,000 TWD 时 2.11%） |
+| Module6 | `Macro10~14` | 台股加权/S&P500/日经/恒生/沪深成分股 |
+| Module6 | `stwid`, `stwpe`, ... | 按代号/PE 排序 |
+
+: 业务逻辑层详细 {#tbl-biz}
+
+### 数据抓取层
+
+这是系统最核心、代码量最大的部分。每个 Module 对应一个市场，内部结构高度一致：
+
+```
+Macro{N}()
+  1. UnprotectSheet()          ← 解锁工作表
+  2. 清除旧数据区域             ← Range().Clear
+  3. 循环抓取多种财务数据        ← HTTP 请求（5~11 种）
+  4. 解析 HTML/JSON             ← DOM 解析 / JsonConverter
+  5. 写入对应列                 ← Cells / Range 赋值
+  6. ProtectSheet()             ← 重新锁定
+  7. Beep                      ← 提示完成
+```
+
+#### 数据源矩阵
+
+| 数据源 | 台股 | 美股 | 港股 | 中股 | 全球 |
+|--------|:----:|:----:|:----:|:----:|:----:|
+| TWSE (twse.com.tw) | **Y** | | | | |
+| OTC (tpex.org.tw) | **Y** | | | | |
+| MoneyDJ (moneydj.com.tw) | **Y** | | | | |
+| MarketWatch (marketwatch.com) | | **Y** | | | |
+| WSJ (wsj.com) | | **Y** | | | **Y** |
+| Yahoo Finance (finance.yahoo.com) | | **Y** | **Y** | **Y** | **Y** |
+| SeekingAlpha / Xignite | | **Y** | | | |
+| AAStocks (aastocks.com) | | | **Y** | **Y** | |
+| Sina Finance (sina.com.cn) | | | | **Y** | |
+| Wise (wise.com) — 汇率 | | | **Y** | | **Y** |
+
+: 数据源覆盖矩阵 {#tbl-datasource}
+
+#### HTTP 连接方式
+
+系统使用三种 HTTP 请求方式，**在各 Module 中重复定义**（未集中管理）：
+
+| 方法 | 用途 | 出现位置 |
+|------|------|---------|
+| `MSXML2.XMLHTTP` | 通用 HTTP GET | Module1~6 |
+| `WinHttp.WinHttpRequest` | 需要 TLS/代理的请求 | Module2, 3, 5, 8 |
+| `QueryTables.Add` | Excel 内建网页查询 | Module1 |
+| `InternetExplorer.Application` | 动态 JS 渲染页面 | Module6 |
+
+### 工具函数层
+
+**`shared_modules.bas`** 提供全局基础设施：
+
+| 函数/Sub | 说明 |
+|----------|------|
+| `findAll(theStr)` → `baseInfo` | 在股票代号数据库中查找，返回 `(theCode, theName, Percent)` |
+| `Stocklist()` | 从 TWSE/OTC 下载台股代号列表到工作表 |
+| `ProtectSheet(ws)` / `UnprotectSheet(ws)` | 统一的工作表保护/解锁 |
+| `Delete_Connection_XL2003()` / `XL2007()` | 清理旧版 Excel 数据连接 |
+| `Auto_open()` | 工作簿打开时自动执行 |
+| `enEvt()` | 重新启用 `Application.EnableEvents` |
+
+**公共类型定义：**
+
+```vb
+Public Type baseInfo
+    theCode As String       ' 股票代号
+    theName As String       ' 股票名称
+    Percent As Single       ' 持股比例
+End Type
+```
+
+**全局变量：**
+
+```vb
+Public theMarket As String      ' 当前市场
+Public theIndustry As String    ' 产业类别
+Public theMarketdate As String  ' 市场日期
+Public myWait As Boolean        ' 等待标志
+```
+
+
+# 系统执行流程 {#sec-flow}
+
+## 主交互流程：查询单支股票
+
+以台股为例（其他市场结构相同）：
+
+```{mermaid}
+%%| label: fig-flow
+%%| fig-cap: "台股查询主流程"
+sequenceDiagram
+    participant U as 用户
+    participant S as Sheet1 (台股)
+    participant SM as shared_modules
+    participant M1 as Module1
+
+    U->>S: 在 A2 输入股票代号
+    activate S
+    S->>S: Worksheet_Change 触发
+    S->>SM: findAll(代号)
+    SM-->>S: 返回 baseInfo
+
+    alt 未找到
+        S->>SM: Stocklist() 刷新代号库
+        S->>SM: findAll(代号) 重试
+    end
+
+    S->>S: 写入 A1 (名称), A2 (代号), A20 (名称)
+    S->>M1: 调用 Macro1()
+    activate M1
+
+    M1->>M1: UnprotectSheet()
+    M1->>M1: 清除旧数据
+
+    loop 11 种数据类型
+        M1->>M1: 构造 URL
+        M1->>M1: HTTP GET (XMLHTTP / QueryTables)
+        M1->>M1: 解析 HTML DOM
+        M1->>M1: 写入对应列区域
+    end
+
+    M1->>M1: ProtectSheet()
+    M1-->>S: 完成
+    deactivate M1
+    S-->>U: Beep 提示完成
+    deactivate S
+```
+
+## 组合批量更新流程
+
+```{mermaid}
+%%| label: fig-batch
+%%| fig-cap: "组合批量更新流程 (Macro20)"
+flowchart LR
+    A[Macro20 启动] --> B{遍历收藏列表}
+    B --> C1[台股 → Macro1]
+    B --> C2[美股 → Macro2]
+    B --> C3[港股 → Macro3]
+    B --> C4[中股 → Macro4]
+    B --> C5[全球 → Macro5]
+    C1 --> D[更新预期回报]
+    C2 --> D
+    C3 --> D
+    C4 --> D
+    C5 --> D
+    D --> E[排名排序]
+    E --> F[格式化输出]
+```
+
+
+# 关键发现与风险评估 {#sec-findings}
+
+## 架构特征
+
+::: {.callout-tip}
+## 设计模式
+- **1 Sheet = 1 Module** 的对应关系，结构清晰、一致
+- 所有市场 Module 遵循相同的执行模板（解锁 → 清除 → 抓取 → 写入 → 锁定）
+- 通过 `ProtectSheet` / `UnprotectSheet` 实现简单的"事务"控制
+:::
+
+| 特征 | 说明 |
+|------|------|
+| 架构模式 | 事件驱动 + 过程式，无 OOP 设计 |
+| Sheet-Module 映射 | 严格 1:1（Sheet1↔Module1, ..., Sheet5↔Module5） |
+| 类封装 | **无**。仅用 `Public Type baseInfo` 做简单结构体 |
+| UserForm | 全部空壳，实际 UI 完全依赖 Excel 单元格 |
+| 错误处理 | 大量 `On Error Resume Next`，出错时静默跳过 |
+| 配置管理 | 硬编码在代码中（URL、列号、数据源地址） |
+
+## 风险点
+
+::: {.callout-warning}
+## 高风险项
+以下问题在系统迁移或维护时需重点关注。
+:::
+
+### 1. 数据源脆弱性
+
+系统依赖 **10+ 个外部网站**的 HTML 结构进行解析。任一网站改版（DOM 结构变化）都会导致对应市场的数据抓取**完全失败**。
+
+**受影响的关键数据源：**
+
+- MoneyDJ、TWSE、TPEX（台股）
+- MarketWatch、WSJ（美股/全球）
+- Yahoo Finance（全市场历史价格）
+- AAStocks（港股/中股）
+- Sina Finance（中股）
+
+### 2. 重复代码
+
+HTTP 连接函数（`ConnectXMLHTTP`、`ConnectWinHttp`、`ConnectMarketWatch`）在 **多个 Module 中重复定义**，未集中到 `shared_modules`。维护时需同步修改多处。
+
+### 3. 静默错误
+
+`On Error Resume Next` 在整个代码库中普遍使用，导致：
+
+- 网络请求失败时不会提示用户
+- 数据解析错误时写入空值或错误值
+- 难以定位问题根源
+
+### 4. 平台兼容性
+
+| 功能 | Windows | macOS |
+|------|:-------:|:-----:|
+| `MSXML2.XMLHTTP` | Y | **N** |
+| `WinHttp.WinHttpRequest` | Y | **N** |
+| `InternetExplorer.Application` | Y | **N** |
+| `QueryTables.Add` | Y | 部分 |
+| Big5 编码 VBA 编辑器 | Y | 乱码 |
+
+::: {.callout-caution}
+当前数据抓取层几乎完全依赖 Windows COM 组件（MSXML2、WinHttp、IE），**无法在 macOS 上运行**。
+:::
+
+### 5. 命名规范
+
+- 所有宏使用 `Macro{N}` 命名（Macro1~Macro30），无语义化命名
+- 变量大量使用单字母（`f`, `dc`, `cd$`）
+- 注释为繁体中文，部分因编码转换存在缺字
+
+
+# 建议的分析顺序 {#sec-analysis-order}
+
+针对后续深入逆向工程或系统重写，建议按以下优先级推进：
+
+| 阶段 | 步骤 | 目标文件 | 目的 |
+|:----:|:----:|---------|------|
+| 0 | 阅读安裝 + 介紹 Sheet | Excel 工作簿 | 理解作者意图、使用方法、系统要求 |
+| 1 | 公共基础 | `shared_modules.bas` | 掌握全局变量、类型定义、`findAll`、`Stocklist`、保护机制 |
+| 2 | 启动入口 | `ThisWorkbook_7.cls` | 理解工作簿打开时的初始化流程 |
+| 3 | 核心路径 | `Sheet1.cls` + `Module1.bas` | **最复杂的实现**（台股11种数据源），理解它即理解整个系统模式 |
+| 4 | 对比分析 | `Module2.bas` | 美股实现，引入 Yahoo Finance + JSON 解析，与台股对比差异 |
+| 5 | 快速扫描 | `Module3~5.bas` | 架构相同，仅数据源不同，确认差异点 |
+| 6 | 业务串联 | `Module7.bas` | 组合管理如何串联所有市场 Module |
+| 7 | 绩效算法 | `Module8.bas` | XIRR + 巴菲特距离公式 |
+| 8 | 独立功能 | `Module6.bas` + `Module9.bas` | 选股筛选 + 税务计算 |
+| 9 | 第三方库 | `JsonConverter.bas` | 确认版本与兼容性 |
+
+```{mermaid}
+%%| label: fig-order
+%%| fig-cap: "建议分析路径"
+flowchart LR
+    A["0 安裝 + 介紹<br/>(Excel Sheet)"] --> B["1 shared_modules<br/>(公共基础)"]
+    B --> C["2 ThisWorkbook_7<br/>(启动入口)"]
+    C --> D["3 Sheet1 + Module1<br/>(台股核心路径)"]
+    D --> E["4 Module2<br/>(美股对比)"]
+    E --> F["5 Module3~5<br/>(其他市场)"]
+    F --> G["6 Module7<br/>(组合管理)"]
+    G --> H["7 Module8<br/>(绩效)"]
+    H --> I["8 Module6 + 9<br/>(选股 + 税务)"]
+
+    style A fill:#ffecb3,stroke:#ff8f00
+    style D fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px
+```
+
+
+# 附录 {#sec-appendix}
+
+## A. Module 内关键 Sub/Function 索引
+
+::: {.panel-tabset}
+
+### Module1（台股）
+
+| 名称 | 类型 | 说明 |
+|------|------|------|
+| `Macro1()` | Sub | 主入口：台股数据抓取 |
+| `OTC(cd$, dc)` | Sub | OTC 柜买市场数据 |
+| `TWReport(url, dc)` | Sub | 台湾财报 HTML 解析 |
+| `TSECFSQT()` | Function | QueryTables 网页查询 |
+| `RSURLTYPE()` | Function | 随机 URL 类型（负载均衡） |
+| `SEASONTF()` / `YEARTF()` | Function | 季度/年度日期转换 |
+| `ERRLOG()` | Function | 错误日志记录 |
+
+### Module2（美股）
+
+| 名称 | 类型 | 说明 |
+|------|------|------|
+| `Macro2()` | Sub | 主入口：美股数据抓取 |
+| `CCRUMBT()` | Function | Yahoo Finance crumb 认证 |
+| `DCSV()` | Function | CSV 数据下载 |
+| `Yahoo_Price_Dividend_Split()` | Sub | Yahoo 历史价格/股息/拆股 |
+
+### Module3~5（港/中/全球）
+
+| 名称 | 类型 | 说明 |
+|------|------|------|
+| `Macro3()` / `Macro4()` / `Macro5()` | Sub | 各市场主入口 |
+| `HK_Yahoo_Price_Dividend_Split()` | Sub | 港股历史数据 |
+| `CN_Yahoo_Price_Dividend_Split()` | Sub | 中股历史数据 |
+| `WW_Yahoo_Price_Dividend_Split()` | Sub | 全球历史数据 |
+| `yhondd()` | Sub | Yahoo 交易所代码映射 |
+| `GDPSCR()` | Sub | GDP 超链接生成 |
+
+### Module6~9（业务）
+
+| 名称 | 类型 | Module | 说明 |
+|------|------|--------|------|
+| `Macro10~14` | Sub | 6 | 五大市场指数成分股 |
+| `Macro15~19` | Sub | 7 | 保存股票到收藏 |
+| `Macro20` | Sub | 7 | 批量更新所有收藏 |
+| `Macro30` | Sub | 8 | 绩效计算主入口 |
+| `pf(f)` / `pfn(f)` | Sub | 8 | 单支/总绩效 |
+| `cpbf(f)` | Sub | 8 | 巴菲特距离对比 |
+| `tax()` / `exdiv()` | Sub | 9 | 税务计算 |
+
+### shared_modules
+
+| 名称 | 类型 | 说明 |
+|------|------|------|
+| `findAll(theStr)` | Function | 股票代号/名称查找 → `baseInfo` |
+| `Stocklist()` | Sub | 下载台股代号清单 |
+| `ProtectSheet(ws)` | Sub | 锁定工作表 |
+| `UnprotectSheet(ws)` | Sub | 解锁工作表 |
+| `Delete_Connection_XL2003()` | Sub | 清理旧连接 |
+| `Auto_open()` | Sub | 自动启动 |
+
+:::
+
+## B. Macro 编号速查表
+
+| 编号 | 功能 | Module | 关联 Sheet |
+|------|------|--------|-----------|
+| Macro1 | 台股数据抓取 | Module1 | 台股 |
+| Macro2 | 美股数据抓取 | Module2 | 美股 |
+| Macro3 | 港股数据抓取 | Module3 | 港股 |
+| Macro4 | 中股数据抓取 | Module4 | 中股 |
+| Macro5 | 全球数据抓取 | Module5 | 全球 |
+| Macro6 | GDP 链接更新 | Module5 | 全球 |
+| Macro8~9 | 缩放/视图调整 | Module1 | — |
+| Macro10 | 台股加权指数 | Module6 | 选股 |
+| Macro11 | S&P 500 | Module6 | 选股 |
+| Macro12 | 日经 225 | Module6 | 选股 |
+| Macro13 | 恒生指数 | Module6 | 选股 |
+| Macro14 | 沪深 180 | Module6 | 选股 |
+| Macro15~19 | 保存到收藏 | Module7 | 收藏 |
+| Macro20 | 批量更新收藏 | Module7 | 收藏 |
+| Macro30 | 绩效计算 | Module8 | 績效 |
+
+: Macro 编号与功能映射 {#tbl-macros}

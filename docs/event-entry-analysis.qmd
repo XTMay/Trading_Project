@@ -1,0 +1,416 @@
+---
+title: "事件层入口分析报告"
+subtitle: "盈再表 VBA 系统 — 系统从哪里开始？"
+author: "Trading Project Team"
+date: today
+date-format: "YYYY-MM-DD"
+lang: zh
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "目录"
+    number-sections: true
+    code-fold: false
+    theme: cosmo
+    fontsize: "1rem"
+    mainfont: "PingFang SC, Microsoft YaHei, sans-serif"
+execute:
+  echo: false
+---
+
+# 事件检测结果 {#sec-detection}
+
+对项目中所有 `.cls`（Workbook / Sheet 对象）和 `.frm`（UserForm）文件进行扫描，检测标准 VBA 事件处理器。
+
+## 事件存在性总表
+
+| 事件类型 | 是否存在 | 所在文件 | 数量 |
+|---------|:-------:|---------|:----:|
+| `Workbook_Open` | **Y** | ThisWorkbook_7.cls | 1 |
+| `Workbook_BeforeSave` | **Y** | ThisWorkbook_7.cls | 1 |
+| `Auto_Open` | **Y** | shared_modules.bas | 1 |
+| `Worksheet_Change` | **Y** | Sheet1~5.cls | 5 |
+| `Worksheet_Activate` | N | — | 0 |
+| `Worksheet_SelectionChange` | N | — | 0 |
+| `CommandButton_Click` | N | — | 0 |
+| `UserForm_Initialize` | N | — | 0 |
+| 任何 UserForm 事件 | N | — | 0 |
+
+: 事件检测清单 {#tbl-events}
+
+::: {.callout-important}
+## 关键发现
+- 系统**只有 8 个事件处理器**，全部集中在 2 个文件中（ThisWorkbook_7 + Sheet1~5）
+- **UserForm1~5 全部为空壳**：.frm 文件代码区无任何 Sub/Function
+- **没有任何按钮点击事件**：UI 交互完全依赖单元格编辑触发 `Worksheet_Change`
+- Sheet6~9、Sheet01、Worksheet___1~6、ThisWorkbook_1~6 **均无代码**
+:::
+
+
+# 系统启动入口 {#sec-entry}
+
+系统有 **3 个自动触发入口** 和 **1 类手动触发入口**。
+
+## 自动触发入口（打开工作簿时）
+
+```{mermaid}
+%%| label: fig-boot
+%%| fig-cap: "系统启动序列"
+sequenceDiagram
+    participant User as 用户
+    participant Excel as Excel Runtime
+    participant WB as ThisWorkbook_7
+    participant SM as shared_modules
+
+    User->>Excel: 打开 盈再表250723.xlsm
+    Excel->>WB: ① Workbook_Open()
+    activate WB
+    WB->>WB: 禁用 BackgroundChecking
+    WB->>WB: 隐藏 External Data 工具栏
+    WB->>WB: 禁用 AutoRecover
+    WB->>WB: 禁用 AskToUpdateLinks
+    WB->>SM: Delete_Connection_XL2003()
+    WB->>WB: QueryTablesDelete("all")
+    WB->>WB: 配置 MaxChange / RemoteRef / Precision
+    WB->>WB: 禁用全部 AutoCorrect
+    deactivate WB
+    Excel->>SM: ② Auto_open()
+    activate SM
+    SM->>SM: Sheets("台股").[ZZ1] = """"
+    SM->>SM: Sheets("美股").[ZZ1] = """"
+    deactivate SM
+    Note right of SM: 启动完成，等待用户交互
+```
+
+### 入口 ① — `Workbook_Open`
+
+| 属性 | 值 |
+|------|---|
+| **文件** | `ThisWorkbook_7.cls:10` |
+| **修饰符** | `Private Sub` |
+| **触发时机** | 工作簿打开时自动执行 |
+| **错误处理** | `On Error Resume Next`（静默） |
+
+**第一层调用：**
+
+| 调用目标 | 来源 | 作用 |
+|---------|------|------|
+| `Delete_Connection_XL2003` | shared_modules.bas | 删除旧版 Excel 数据连接 |
+| `QueryTablesDelete("all")` | ThisWorkbook_7.cls:44 (本文件) | 清除所有工作表的 QueryTable |
+
+**直接设置的 Application 属性：**
+
+```
+Application.ErrorCheckingOptions.BackgroundChecking = False
+Application.CommandBars("External Data").Visible = False
+Application.AutoRecover.Enabled = False
+Application.AskToUpdateLinks = False
+Application.MaxChange = 0.001
+Application.AutoCorrect.* = False  (6项全关)
+ActiveWorkbook.UpdateRemoteReferences = False
+ActiveWorkbook.PrecisionAsDisplayed = False
+ActiveWorkbook.SaveLinkValues = False
+```
+
+### 入口 ② — `Auto_open`
+
+| 属性 | 值 |
+|------|---|
+| **文件** | `shared_modules.bas:242` |
+| **修饰符** | `Sub`（Public，VBA 自动识别） |
+| **触发时机** | 工作簿打开后自动执行 |
+
+**第一层调用：** 无函数调用。仅向两个 Sheet 的 ZZ1 单元格写入双引号字符。
+
+```vb
+Sub Auto_open()
+    Sheets("台股").[zz1] = """"
+    Sheets("美股").[zz1] = """"
+End Sub
+```
+
+::: {.callout-note}
+`Workbook_Open` 和 `Auto_open` 的执行顺序：Excel 先执行 `Workbook_Open`，再执行 `Auto_open`。两者共同构成完整的启动序列。
+:::
+
+### 入口 ③ — `Workbook_BeforeSave`
+
+| 属性 | 值 |
+|------|---|
+| **文件** | `ThisWorkbook_7.cls:38` |
+| **修饰符** | `Private Sub` |
+| **触发时机** | 用户保存工作簿前自动执行 |
+
+**第一层调用：**
+
+| 调用目标 | 作用 |
+|---------|------|
+| `QueryTablesDelete("all")` | 保存前清除所有 QueryTable，避免保存无用连接 |
+
+
+## 用户交互入口（Worksheet_Change）
+
+这是系统的**主交互路径**——用户在某个市场 Sheet 的 **A2 单元格**输入股票代号，触发数据抓取。
+
+### Sheet1（台股）— 最复杂的入口
+
+| 属性 | 值 |
+|------|---|
+| **文件** | `Sheet1.cls:10` |
+| **触发条件** | 编辑台股 Sheet 的 A1 或 A2 单元格 |
+| **Guard 条件** | 排除全行选中、Column > 1、Row > 2 |
+
+**第一层调用链：**
+
+```{mermaid}
+%%| label: fig-sheet1
+%%| fig-cap: "Sheet1 Worksheet_Change 调用链"
+flowchart TD
+    A["Worksheet_Change(Target)"] --> B{"Guard 检查"}
+    B -->|"整行选中 / 非A列 / Row>2"| EXIT["Exit Sub"]
+    B -->|通过| C["DisableEvents + UpdateScreen"]
+    C --> D["findAll(Target.Text)"]
+    D --> E{找到?}
+    E -->|N| F["Stocklist()"]
+    F --> G["findAll() 重试"]
+    G --> H{找到?}
+    E -->|Y| I["写入 A2=代号, A1=名称, A20=名称"]
+    H -->|Y| I
+    H -->|N| I2["跳过（静默）"]
+    I --> J["Macro1()"]
+    I2 --> J
+    J --> K["EnableEvents"]
+    K --> L["ProtectSheet(ActiveSheet)"]
+    L --> M["Beep"]
+
+    style D fill:#e8f5e9,stroke:#388e3c
+    style F fill:#fff3e0,stroke:#f57c00
+    style J fill:#e3f2fd,stroke:#1565c0,stroke-width:3px
+```
+
+| 序号 | 调用目标 | 所在模块 | 作用 |
+|:---:|---------|---------|------|
+| 1 | `findAll(text)` | shared_modules.bas | 在股票数据库中查找代号/名称 |
+| 2 | `Stocklist()` | shared_modules.bas | 若未找到，刷新台股代号清单 |
+| 3 | `findAll(text)` | shared_modules.bas | 重试查找 |
+| 4 | **`Macro1()`** | Module1.bas | **核心：台股11种财务数据抓取** |
+| 5 | `ProtectSheet(ActiveSheet)` | shared_modules.bas | 锁定工作表 |
+
+### Sheet2~5 — 统一模式
+
+Sheet2~5 采用**完全相同的极简结构**：
+
+```vb
+Private Sub Worksheet_Change(ByVal Target As Range)
+    If Target.Address <> "$A$2" Then Exit Sub   ' 仅监听 A2
+    Macro{N}                                     ' 直接调用对应 Macro
+    Call ProtectSheet(ActiveSheet)               ' 锁定
+    Beep                                         ' 提示音
+End Sub
+```
+
+| Sheet | 文件 | Guard 条件 | 第一层调用 |
+|-------|------|-----------|-----------|
+| Sheet2（美股） | `Sheet2.cls:10` | `Target.Address <> "$A$2"` | `Macro2` → `ProtectSheet` |
+| Sheet3（港股） | `Sheet3.cls:10` | `Target.Address <> "$A$2"` | `Macro3` → `ProtectSheet` |
+| Sheet4（中股） | `Sheet4.cls:10` | `Target.Address <> "$A$2"` | `Macro4` → `ProtectSheet` |
+| Sheet5（全球） | `Sheet5.cls:10` | `Target.Address <> "$A$2"` | `Macro5` → `ProtectSheet` |
+
+::: {.callout-tip}
+## 设计模式
+Sheet1 比 Sheet2~5 多了 `findAll` + `Stocklist` 的查找逻辑，因为台股支持通过股票名称（而非仅代号）触发查询。Sheet2~5 仅支持直接输入代号。
+:::
+
+
+# 手动触发入口（Macro 宏） {#sec-manual}
+
+除事件驱动外，以下 `Sub` 可通过 Excel 宏菜单、工具栏按钮或快捷键手动调用：
+
+## 完整 Macro 入口清单
+
+| Macro | Module | 功能 | 触发方式 |
+|-------|--------|------|---------|
+| `Macro1` | Module1 | 台股数据抓取 | Sheet1 事件 **+** 手动 |
+| `Macro2` | Module2 | 美股数据抓取 | Sheet2 事件 **+** 手动 |
+| `Macro3` | Module3 | 港股数据抓取 | Sheet3 事件 **+** 手动 |
+| `Macro4` | Module4 | 中股数据抓取 | Sheet4 事件 **+** 手动 |
+| `Macro5` | Module5 | 全球数据抓取 | Sheet5 事件 **+** 手动 |
+| `Macro6` | Module5 | GDP 链接更新 | 仅手动 |
+| `Macro8` | Module1 | 缩放调整 | 仅手动 |
+| `Macro9` | Module1 | 视图调整 | 仅手动 |
+| `Macro10` | Module6 | 台股加权指数 | 仅手动 |
+| `Macro11` | Module6 | S&P 500 成分股 | 仅手动 |
+| `Macro12` | Module6 | 日经 225 | 仅手动 |
+| `Macro13` | Module6 | 恒生指数 | 仅手动 |
+| `Macro14` | Module6 | 沪深 180 | 仅手动 |
+| `Macro15` | Module7 | 保存台股到收藏 | 仅手动 |
+| `Macro16` | Module7 | 保存美股到收藏 | 仅手动 |
+| `Macro17` | Module7 | 保存港股到收藏 | 仅手动 |
+| `Macro18` | Module7 | 保存中股到收藏 | 仅手动 |
+| `Macro19` | Module7 | 保存全球到收藏 | 仅手动 |
+| `Macro20` | Module7 | 批量更新所有收藏 | 仅手动 |
+| `Macro21` | Module7 | 收藏相关操作 | 仅手动 |
+| `Macro22` | Module7 | 收藏相关操作 | 仅手动 |
+| `Macro23` | Module7 | 收藏相关操作 | 仅手动 |
+| `Macro24` | Module7 | 收藏相关操作 | 仅手动 |
+| `Macro25` | Module7 | 收藏相关操作 | 仅手动 |
+| `Macro26` | Module7 | 收藏相关操作 | 仅手动 |
+| `Macro27` | Module7 | 收藏相关操作 | 仅手动 |
+| `Macro28` | Module7 | 收藏相关操作 | 仅手动 |
+| `Macro29` | Module7 | 收藏相关操作 | 仅手动 |
+| `Macro30` | Module8 | 绩效计算 | 仅手动 |
+| `Macro35` | Module8 | 绩效相关 | 仅手动 |
+| `Macro36` | Module8 | 绩效相关 | 仅手动 |
+| `Macro37` | Module8 | 绩效相关 | 仅手动 |
+| `Macro40` | Module7 | 收藏相关操作 | 仅手动 |
+| `Macro41` | Module7 | 收藏相关操作 | 仅手动 |
+| `tax` | Module9 | 打开并处理税务文件 | 仅手动 |
+| `exdiv` | Module9 | 除息税计算 | 仅手动 |
+| `taxtb` | Module9 | 税务表计算 | 仅手动 |
+| `Stocklist` | shared_modules | 刷新台股代号数据库 | Sheet1 事件内 **+** 手动 |
+| `enEvt` | shared_modules | 重新启用 Events | 仅手动（紧急恢复用） |
+
+: 全部可调用入口清单 {#tbl-all-entries}
+
+
+# 第一层调用关系总图 {#sec-callgraph}
+
+```{mermaid}
+%%| label: fig-callgraph
+%%| fig-cap: "事件层 → 第一层调用 完整关系图"
+%%| fig-width: 100%
+graph LR
+    subgraph auto["自动触发（打开工作簿）"]
+        WO["Workbook_Open"]
+        AO["Auto_open"]
+        BS["Workbook_BeforeSave"]
+    end
+
+    subgraph sheet["用户交互（编辑A2单元格）"]
+        S1["Sheet1<br/>Worksheet_Change"]
+        S2["Sheet2<br/>Worksheet_Change"]
+        S3["Sheet3<br/>Worksheet_Change"]
+        S4["Sheet4<br/>Worksheet_Change"]
+        S5["Sheet5<br/>Worksheet_Change"]
+    end
+
+    subgraph manual["手动触发（宏菜单/按钮）"]
+        M6["Macro10~14"]
+        M7["Macro15~29,40,41"]
+        M8["Macro30,35~37"]
+        M9["tax / exdiv / taxtb"]
+    end
+
+    subgraph target["第一层调用目标"]
+        DC["Delete_Connection_XL2003"]
+        QT["QueryTablesDelete"]
+        FA["findAll"]
+        SL["Stocklist"]
+        PS["ProtectSheet"]
+        Mac1["Macro1<br/>(Module1 台股)"]
+        Mac2["Macro2<br/>(Module2 美股)"]
+        Mac3["Macro3<br/>(Module3 港股)"]
+        Mac4["Macro4<br/>(Module4 中股)"]
+        Mac5["Macro5<br/>(Module5 全球)"]
+    end
+
+    WO --> DC
+    WO --> QT
+    BS --> QT
+
+    S1 --> FA
+    S1 --> SL
+    S1 --> Mac1
+    S1 --> PS
+    S2 --> Mac2
+    S2 --> PS
+    S3 --> Mac3
+    S3 --> PS
+    S4 --> Mac4
+    S4 --> PS
+    S5 --> Mac5
+    S5 --> PS
+
+    M7 -->|"Macro20 批量更新"| Mac1
+    M7 -->|"Macro20 批量更新"| Mac2
+    M7 -->|"Macro20 批量更新"| Mac3
+    M7 -->|"Macro20 批量更新"| Mac4
+    M7 -->|"Macro20 批量更新"| Mac5
+
+    style auto fill:#fff3e0,stroke:#f57c00
+    style sheet fill:#e3f2fd,stroke:#1565c0
+    style manual fill:#f3e5f5,stroke:#7b1fa2
+    style target fill:#e8f5e9,stroke:#388e3c
+```
+
+
+# 异常发现 {#sec-anomalies}
+
+分析过程中发现以下需要注意的问题：
+
+| # | 异常 | 详情 | 风险等级 |
+|:-:|------|------|:-------:|
+| 1 | **JsonConverter.bas 名不副实** | 文件内容实为 Module8.bas 的副本（1204 行 vs 1205 行，仅缺 `Attribute VB_Name` 行）。不含任何 JSON 解析代码。 | 高 |
+| 2 | **Macro1 无条件执行** | Sheet1.cls:44 — `Call Macro1` 在 `findAll` 未找到股票时仍然执行（上方注释掉了条件判断） | 中 |
+| 3 | **Sheet1 vs Sheet2~5 不对称** | Sheet1 有完整的查找逻辑（findAll + Stocklist 回退），Sheet2~5 无任何查找，直接调用 Macro | 低 |
+| 4 | **Macro 编号不连续** | 缺少 Macro7、Macro31~34、Macro38~39。编号分配无规律。 | 低 |
+| 5 | **Auto_open 功能极简** | 仅向两个 Sheet 的 ZZ1 写入双引号，用途不明（可能是初始化标记） | 低 |
+| 6 | **空壳文件过多** | ThisWorkbook_1~6、Sheet01、Sheet6~9、Worksheet___1~6、UserForm1~5 — 共 22 个文件无代码 | 低 |
+
+: 异常发现列表 {#tbl-anomalies}
+
+::: {.callout-warning}
+## JsonConverter.bas 文件异常
+`JsonConverter.bas` 不是第三方 JSON 解析库，而是 `Module8.bas`（绩效计算）的**重复副本**。
+如果代码中有 `JsonConverter.ParseJson` 调用，运行时将找不到该函数。
+需确认：(a) 实际的 JSON 解析功能在哪里？(b) 是否已内联到 Module2 中？
+:::
+
+
+# 结论：系统从哪里开始？ {#sec-conclusion}
+
+```{mermaid}
+%%| label: fig-summary
+%%| fig-cap: "系统入口总结"
+flowchart TB
+    subgraph A["Phase 1: 启动"]
+        direction TB
+        A1["① Workbook_Open<br/><small>禁用特性 + 清理连接</small>"]
+        A2["② Auto_open<br/><small>写入初始化标记</small>"]
+        A1 --> A2
+    end
+
+    subgraph B["Phase 2: 等待用户"]
+        B1(("用户输入<br/>股票代号"))
+    end
+
+    subgraph C["Phase 3: 数据抓取"]
+        direction TB
+        C1["Sheet.Worksheet_Change"]
+        C2["Macro1~5"]
+        C3["HTTP 抓取 + 解析"]
+        C1 --> C2 --> C3
+    end
+
+    subgraph D["Phase 4: 进阶操作"]
+        D1["Macro15~19 保存收藏"]
+        D2["Macro20 批量更新"]
+        D3["Macro30 绩效计算"]
+        D4["tax/exdiv 税务"]
+    end
+
+    A --> B --> C
+    C --> D
+
+    style A fill:#fff3e0,stroke:#f57c00
+    style B fill:#e3f2fd,stroke:#1565c0
+    style C fill:#e8f5e9,stroke:#388e3c
+    style D fill:#f3e5f5,stroke:#7b1fa2
+```
+
+**一句话总结：**
+
+> 系统通过 `Workbook_Open` + `Auto_open` 完成静默初始化，随后进入等待状态。
+> 用户在任一市场 Sheet 的 **A2 单元格输入股票代号**，触发 `Worksheet_Change` → `Macro{N}` 执行数据抓取。
+> 其他高级功能（组合管理、绩效、税务）均为**手动调用**的独立宏。

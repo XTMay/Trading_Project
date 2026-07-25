@@ -60,7 +60,7 @@ Sub FetchStockData()
 
     Dim wsh As Object
     Set wsh = CreateObject("WScript.Shell")
-    wsh.Run "cmd /c " & cmd, 0, True   ' 0=hidden window, True=wait for completion
+    wsh.Run "cmd /c """ & cmd & """", 0, True   ' 0=hidden window, True=wait for completion
     Set wsh = Nothing
 
     ' Check if temp file was created

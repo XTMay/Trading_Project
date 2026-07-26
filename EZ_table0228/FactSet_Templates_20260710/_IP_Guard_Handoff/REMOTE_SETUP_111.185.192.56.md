@@ -138,7 +138,12 @@ foreach($r in $roots){ if(Test-Path $r){ Get-ChildItem $r -Recurse -Filter *.exe
 **根因（2026-07-26 更正，推翻先前「遠端 SAC=1 放行」的誤判）**：`%LOCALAPPDATA%\FactSetVpnProxy\` 內的 proxy 是**自行用 C#（`.cs`）現場編譯的 `.exe`，不是 FactSet 官方二進位**。實機佐證：exe 僅 **15,360 bytes**、`CompanyName` 空白、`FileVersion=1.0.0.0`、**NotSigned**——典型自編小程式（官方檔會有公司名、正式版號、且經 FactSet 簽章、體積也大得多）。
 - **自編 + 未簽章 + 私有檔 → 全球普及度＝0 → ISG 永遠回 `unknown` → SAC 強制(=1)在任何機器都會封鎖它**。本機已實測：SAC=1 時 `Start-Process` 此 proxy 回「An Application Control policy has blocked this file」。
 - **⇒ 先前「遠端 SAC=1 放行」是誤判**：遠端那支只是「在 SAC 尚未強制時就啟動、之後一直沒被殺」的**倖存進程**（SAC 擋的是「啟動」，不會殺已在跑的）。**一旦被殺（VPN 斷 → App Kill Switch 連帶收掉 proxy、或手動 kill），SAC=1 下就再也起不回來 → PAC 連不到 → WinINET fail-open 退回 DIRECT → 台灣 IP 裸奔**。所以「SAC 開」不是防護、反而是洩漏地雷。
-- **⇒ 定論：兩台 SAC 都維持關(=0)**，並以 **`defender_harden.ps1` 作補償控制**（已於遠端 2026-07-26 執行：`PUA`/受控資料夾/網路防護 + 6 條不打到本活頁簿的 ASR 規則；其中「擋低信譽未簽章 exe」`01443614` 設 **AuditMode**、proxy 加 ASR 例外；**絕不開**會搞死巨集的 4 條 Office-ASR，見腳本末註）。
+- **★現場實測坐實「App KS 必殺 proxy、SAC=0 才救得回」（2026-07-26 23:40）**：
+  - 前提查證：NordVPN `settings\22604B65.json` 的 **`KillSwitchApps` 陣列含 FactSetVpnProxy 等 25 支**（`KillSwitch=true`、`InternetKillSwitch=false`）。
+  - 關 Excel 後手動 Disconnect NordVPN → `FactSetVpnProxy`(PID 32700) **連同全部 25 支 FDS 程序被 App KS 殺光、埠 `3128/8765`→`0/0`**（PAC 死＝臨界洩漏態；因 Excel 已關故無實際外洩）。
+  - 重連後 NordVPN **不自動重啟** proxy（KS 只殺不起）。
+  - 因 **SAC=0**，`Start-Process` 成功救回（新 PID、埠 `3128/8765` 回、隧道探測 `404` 非-502）。**若 SAC=1，此步被 ISG 擋死＝永久裸奔到重灌。** 證畢。
+- **⇒ 定論：兩台 SAC 都維持關(=0)**，並以 **`defender_harden.ps1` 作補償控制**（已於遠端 2026-07-26 執行：`PUA`/受控資料夾/網路防護 + 6 條不打到本活頁簿的 ASR 規則；其中「擋低信譽未簽章 exe」`01443614` 設 **AuditMode**、proxy 加 ASR 例外；**絕不開**會搞死巨集的 4 條 Office-ASR，見腳本末註）。重測工具：`killswitch_test.ps1`（0.5s 觀測 proxy PID/FDS 數/埠）。
 - **⚠️ 單程票**：SAC `1→0` 隨時可關，`0→1` 需**重設 Windows**。兩台現皆 SAC=0，維持現狀、不要重開。
 - **唯一能讓 SAC 放行此 exe 的路**＝拿 code-signing 憑證**自簽這支 exe**（FactSet 不會幫簽——根本不是它的檔）；自簽後每日簽章偵測（Part C）才會變 `Valid`。
 - ⚠️ **`defender_harden.ps1` 編碼坑**：該檔含中文註解且**無 BOM**，本機系統代碼頁＝950(Big5) 的 PS5.1 會讀成亂碼→剖析失敗；已轉存為 **UTF-8 with BOM** 修好。另原腳本用 `Set-MpPreference` 逐條設 ASR（會整組覆蓋、只剩最後一條），已改為 **`Add-MpPreference`** 疊加，6 條規則才全到位。

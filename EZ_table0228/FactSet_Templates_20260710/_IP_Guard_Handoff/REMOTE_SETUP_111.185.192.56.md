@@ -52,7 +52,7 @@
   - ⚠️ **腳本修正紀錄（2026-07-26）**：`fix_guard_port_remote.ps1` 原本有 PS5.1 剖析錯誤——throw 字串裡的 `"$bn: ..."` 被當成 scope 變數（`$bn:`）→ 整支腳本**從未成功執行過**。已把 4 處 `$bn:` 改為 `${bn}:`，`Parser::ParseFile` 驗證 PARSE OK 後才成功跑完。日後若從本機重抄此腳本，記得該修正。
   - ⚠️ **隧道 IP 與閘道 IP 差異（新 session 必知；已修進 `leak_monitor2.ps1`）**：本機隧道 local IP＝`10.5.*`；**遠端 GENE_AI-LAB 隧道 local IP＝`100.126.x`（NordLynx 100.64.0.0/10 CGNAT 段）**。`leak_monitor2.ps1` 原寫死 `10.5.*` 判隧道→在遠端會把**每一條正確走隧道的 FactSet 連線誤判成 `DIRECT-LEAK!`**。已改為啟動時讀 NordLynx 介面實際 IPv4（新 `Test-Tun`，仍相容 `10.5.*`）。另：遠端實測 FactSet 閘道 IP＝`64.209.89.46` 與 `192.234.235.x`（`.45`/`.121`）——**`64.209.89.46` 不在 runbook 寫死的 `192.234.235.0/24`**，故 `leak_monitor2` 的閘道前綴法會漏抓此 IP，靠其 FDS-family 檢查補上（FactSetVpnProxy 走隧道＝TUNNEL-OK）；`capture_a2.ps1` 則會**從 FactSetVpnProxy 隧道連線動態學習閘道 IP**，較穩健。
   - 驗證改對沒（遠端跑）：`(Invoke-WebRequest 'https://nativecloud-gateway-va.factset.com' -Proxy 'http://127.0.0.1:3128' -TimeoutSec 5 -UseBasicParsing).StatusCode` 或 catch 到的狀態碼＝**非 502** 即通。
-- ⚠️ 先判斷遠端 proxy 埠是「**每次啟動固定**」還是「**動態指派**」：本機 18080 長期穩定＝多半每台固定值；但兩台不同＝各安裝各自指派。**若可能動態，務必走方案 1（自適應）**，否則哪天 proxy 重啟換埠又壞。
+- ✅ **已解除（2026-07-26 實測）：遠端 proxy 埠＝「每次啟動固定」，非動態**。證據＝`%LOCALAPPDATA%\FactSetVpnProxy\FactSetVpnProxy.log` 記錄 07-19～07-25 共 **10+ 次真實重啟，每次都綁 `CONNECT proxy 127.0.0.1:3128` + `PAC server 127.0.0.1:8765`**（埠寫死在 binary，`CommandLine` 無埠參數、資料夾無 JSON/ini 埠設定檔）。→ **守衛寫死 `3128`、PAC 指 `8765` 長久安全，重開機/proxy 重啟不會換埠，不需自適應。** 免做手動強制重啟（只會多冒 A-1 洩漏窗風險）。日後只有 FactSet 改版換埠時才需重驗——徵兆＝守衛彈「Proxy 起不來」。查法：`Select-String "$env:LOCALAPPDATA\FactSetVpnProxy\FactSetVpnProxy.log" 'CONNECT proxy listening'` 看最後一行的埠。
 - 註：這也解釋了「遠端 Excel 看得到舊資料」與「守衛應中止」的矛盾——那批資料多半是 proxy 還在 18080（或守衛尚未攔到）時取的；proxy 今天 22:38 重啟後若換到 8765，下次 A2 取數守衛就會攔。**新 session 先修埠、再實測一次 A2 才算數。**
 
 ---

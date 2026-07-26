@@ -1,0 +1,4 @@
+# Transient artifacts regenerated on every run of the monitor/test scripts
+# (leak_monitor2.ps1, capture_a2.ps1, killswitch_test.ps1). Never commit these.
+*.log
+*.STOP

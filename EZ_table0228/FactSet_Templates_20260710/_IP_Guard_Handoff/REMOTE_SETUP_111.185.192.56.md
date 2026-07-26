@@ -27,7 +27,7 @@
 
 ### 0-C. 安全紅線（延續本機政策）
 - **`excel.exe` / `python` / 瀏覽器絕不可加進 NordVPN 分割通道**。
-- **SAC 開關是使用者決策**，AI 不代按（本機是使用者自己關的）。→ 但**遠端經實測不需關**，見 A-5。
+- **SAC 開關是使用者決策**，AI 不代按（本機、遠端皆使用者自己關）。**遠端已於 2026-07-26 關閉(=0)**（見 A-5；對 FactSet 無影響，且 0→1 需重設 Windows）。
 - **App Kill Switch 保持開；網路 Kill Switch 保持關**。
 
 ---
@@ -134,15 +134,16 @@ foreach($r in $roots){ if(Test-Path $r){ Get-ChildItem $r -Recurse -Filter *.exe
 ```
 - **★回讀驗證（必做）**：分割通道清單 + Kill Switch 清單各開來看，確認 **`FactSetVpnProxy` 在內**、且 **`excel.exe`/`python*`/`chrome`/`msedge`/`msedgewebview2`/瀏覽器一律不在內**；各截一張圖存證。
 
-### A-5. Smart App Control（SAC）★遠端實測：不用關
-**遠端 2026-07-25 實測**：`SAC=1（強制）`，proxy 雖 NotSigned 卻於 **07-25 22:38 在 SAC=1 下成功啟動**（該機上次開機 07-22 12:42，proxy 是開機三天後、SAC 已強制中才起來的）→ **證明遠端 SAC 放行這支未簽章 proxy**（SAC 對「未簽章但雲端 ISG 信譽足夠」的檔案是放行的；三天後信譽已成熟）。
-- **結論：遠端 SAC 維持開啟(=1)，不需要關。** 守衛的 proxy 重啟(`Start-Process`)在遠端 SAC=1 下也能成功→**同時有 SAC 防護 + 守衛自我修復**，姿態比本機好。
-- 對照本機：本機 07-22 切 SAC 強制時信譽未足→proxy 被擋→才關本機 SAC(=0)。本機理論上現在也可重開 SAC，但**重開是單程票需重設 Windows**，不急、先不動。
-- 查 SAC：
+### A-5. Smart App Control（SAC）★狀態變更：使用者於 2026-07-26 自行關閉(=0)
+**⚠️ 現況（2026-07-26）：遠端 SAC = `0`（關閉）——使用者自行關閉。** 對 FactSet 取數／零洩漏**無任何影響**（proxy/隧道/守衛/PAC 與 SAC 無關，SAC=0 下 proxy 更是必然能跑）。
+- **⚠️ 單程票**：SAC `1→0` 隨時可關，但 **`0→1` 需重設 Windows** 才能重開。故遠端目前**回不去 SAC=1**（除非重灌）。
+- **歷史（2026-07-25 實測，供參）**：當時 `SAC=1（強制）`，proxy 雖 NotSigned 仍於 07-25 22:38 在 SAC=1 下成功啟動 → 證明遠端 SAC 本來就**放行**這支未簽章 proxy（ISG 信譽足夠）。**當時結論是「遠端維持 SAC=1 較佳（防護+功能兼得）」**；惟使用者 07-26 另有考量自行關閉，屬 0-C 的使用者決策，AI 不代按、僅記錄。→ **所以遠端關 SAC 對 FactSet 並非必要（本來就放行），但既已關且無害，維持現狀。**
+- 對照本機：本機 07-22 切 SAC 強制時信譽未足→proxy 被擋→才關本機 SAC(=0)。兩台現皆 SAC=0。
+- 查 SAC（現應回 `0`）：
 ```powershell
 (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' -EA SilentlyContinue).VerifiedAndReputablePolicyState  # 0關/1強制/2評估
 ```
-> ⚠️ 若哪天 FactSet **更新了 proxy exe**（hash 變）導致新 hash 一時無信譽被 SAC 擋，症狀=proxy 起不來、守衛彈「Proxy 起不來」。屆時再評估（多半 ISG 幾天後又放行）。
+> ℹ️ 此前 SAC=1 時的顧慮「FactSet 更新 proxy exe→新 hash 一時無信譽被 SAC 擋」**現已不適用**（SAC=0，不再有簽章強制）。留作歷史參考。
 
 ### A-6. 系統 DNS（不要動）
 NordLynx 網卡 DNS 維持 Nord 原廠 `103.86.96.100/99.100`；Google 網站靠瀏覽器 DoH(A-3)。改系統/網卡 DNS 在此環境不穩，**遠端一律不碰**。
@@ -163,7 +164,7 @@ Get-ChildItem 'C:\Github\Trading_Project\EZ_table0228\FactSet_Templates_20260710
 ---
 
 ## Part B — 這幾天怎麼修到定案（濃縮脈絡）
-- **B-1 SAC**：本機未簽章 proxy 被強制 SAC 擋→關本機 SAC。**遠端反而 SAC=1 放行(見 A-5)**。
+- **B-1 SAC**：本機未簽章 proxy 被強制 SAC 擋→關本機 SAC。**遠端當時 SAC=1 反而放行**；後於 07-26 由使用者自行關閉=0（現況見 A-5）。
 - **B-2 WebView2 nativecloud 洩漏**：proxy 沒跑時 WebView2/瀏覽器直連 FactSet 閘道洩漏台灣 IP（FDSPipe 那半仍走美國＝「一半漏」）→守衛取數前把關 + proxy 必須存活(A-1)。
 - **B-3 VPN vs 瀏覽器 DNS**：Nord 挾持 DNS 害 Google→瀏覽器 DoH（Comet 無解捨棄）。改系統 DNS 不穩已放棄。
 - **B-4 NordVPN**：無 CLI；`nordvpn://connect`（連某美國）；登入走 OS 預設瀏覽器，**Comet 會吃掉 OAuth 回呼**→登入前把預設瀏覽器設 Edge，或把 `nordvpn://login...` 用 Edge/`Start-Process` 開；登入成功但 UI 卡＝重啟 NordVPN.exe(UI，非 service)。
@@ -174,9 +175,9 @@ Get-ChildItem 'C:\Github\Trading_Project\EZ_table0228\FactSet_Templates_20260710
 
 ## Part C — 簽章偵測 & SAC（回答使用者）
 - **每日簽章偵測「已內建」**：`VpnGuard_Open`→`DailySignatureCheck`，每日至多一次（`%TEMP%\vpnguard_sig_YYYYMMDD.flag`），`Get-AuthenticodeSignature` 變 `Valid` 就彈「可恢復 SAC（需重設 Windows）」。遠端同一份程式碼，開檔即自動偵測，無需另裝。
-- **注意「簽章 Valid」≠「SAC 放行」是兩件事**：遠端現在 proxy 仍 NotSigned，但 SAC=1 已**因 ISG 信譽**放行(A-5)。簽章偵測是等 FactSet 真的出**數位簽章版**（更徹底、跨機一致）。
+- **注意「簽章 Valid」≠「SAC 放行」是兩件事**：proxy 仍 NotSigned；此前 SAC=1 時因 ISG 信譽放行，**現 SAC=0 更無簽章強制**(A-5)。簽章偵測是等 FactSet 真的出**數位簽章版**（更徹底、跨機一致）。
 - **恢復 SAC 是使用者手動決策**，且是重設 Windows 等級動作，巨集只通知不代做。
-- **遠端結論**：SAC 已放行 proxy → **遠端保持 SAC 開，什麼都不用做。**
+- **遠端結論（已更新 2026-07-26）**：SAC 原本放行 proxy、當時建議保持開；但使用者已自行關閉(=0)。**FactSet 不受影響**；因 0→1 需重設 Windows，遠端維持現狀 SAC=0、不再動。
 
 ---
 
@@ -199,11 +200,11 @@ Get-ChildItem 'C:\Github\Trading_Project\EZ_table0228\FactSet_Templates_20260710
 ```
 **判讀 / 已知狀態**：
 - FactSet + NordVPN(已登入)：**使用者已確認裝好**。
-- SAC：**已實測=1，放行 proxy，不用動**(A-5)。
+- SAC：**已於 2026-07-26 由使用者關閉=0**(A-5)；對 FactSet 無影響，不用動。
 - **交接夾若不存在**：`_IP_Guard_Handoff` 內的 `leak_monitor*.ps1`/`defender_harden.ps1`（Part E 要用）可能沒複製過去 → **請使用者把整個 `_IP_Guard_Handoff` 資料夾複製到遠端同路徑**（不是只複製 2 本）。
 
 ### Phase 1 — 先把 proxy 拉起來並確認在聽（防洩漏第一關）
-- 確認 `FactSetVpnProxy` 在跑、18080 在聽（Phase 0 已看）。遠端 SAC=1 但放行，若沒跑可直接：
+- 確認 `FactSetVpnProxy` 在跑、8765+3128 在聽（Phase 0 已看）。遠端 SAC=0（已關），proxy 必能跑，若沒跑可直接：
 ```powershell
 if(-not(Get-Process FactSetVpnProxy -EA SilentlyContinue)){ Start-Process "$env:LOCALAPPDATA\FactSetVpnProxy\FactSetVpnProxy.exe" -WindowStyle Hidden }
 Start-Sleep 2; Get-NetTCPConnection -LocalPort 18080 -State Listen -EA SilentlyContinue | % { (Get-Process -Id $_.OwningProcess).ProcessName }
@@ -248,7 +249,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Github\Trading_Project\E
 
 ## Part F — 遠端專屬注意
 1. **執行模型**：PowerShell 在遠端跑(0-A)。
-2. **SAC 不用關**（遠端實測放行，A-5）——這是遠端與本機最大差異。
+2. **SAC**：遠端原可維持開(=1，放行 proxy)，惟使用者已於 2026-07-26 自行關閉(=0)——對 FactSet 無影響；0→1 需重設 Windows(A-5)。兩台現皆 SAC=0。
 3. **RDP 自我斷線**：網路 KS 關、不反向、別誤加程序(0-B)。
 4. **巨集能不能跑**：MOTW/信任中心是「開檔沒彈窗」的頭號嫌疑(A-7)。
 5. **交接夾要整個複製**（不只 2 本），否則 Part E 監視器不在。
@@ -264,5 +265,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Github\Trading_Project\E
 > 我要把本機的 FactSet IP 防護環境複製到遠端 111.185.192.56（主機名 GENE_AI-LAB），使兩台一致。請照
 > `...\EZ_table0228\FactSet_Templates_20260710\_IP_Guard_Handoff\REMOTE_SETUP_111.185.192.56.md`
 > 執行：先跑 Part D Phase 0 前提盤點回報，再依 Phase 1→4 設定，最後 Part E 驗零洩漏。
-> 已知：FactSet+NordVPN 已裝已登入；**遠端 SAC=1 但實測放行未簽章 proxy，不用關 SAC**。
+> 已知：FactSet+NordVPN 已裝已登入；**遠端 SAC 已由使用者關閉=0（2026-07-26），對 FactSet 無影響、不用再動**。
 > 安全紅線：excel/python/瀏覽器不加分割通道；網路 Kill Switch 保持關、不選反向模式（會斷我 RDP）；SAC 不動。

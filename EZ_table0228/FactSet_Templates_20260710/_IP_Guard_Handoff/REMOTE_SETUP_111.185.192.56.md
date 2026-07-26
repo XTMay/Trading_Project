@@ -27,7 +27,7 @@
 
 ### 0-C. 安全紅線（延續本機政策）
 - **`excel.exe` / `python` / 瀏覽器絕不可加進 NordVPN 分割通道**。
-- **SAC 開關是使用者決策**，AI 不代按（本機、遠端皆使用者自己關）。**遠端已於 2026-07-26 關閉(=0)**（見 A-5；對 FactSet 無影響，且 0→1 需重設 Windows）。
+- **SAC 兩台都必須關(=0)**：proxy 是自編未簽章程式、ISG 永不放行，SAC=1 會擋它啟動→被殺就救不回→IP 裸奔（定論見 A-5）。已關+`defender_harden.ps1` 補償。AI 不代按 SAC 開關，但這是硬需求非偏好。
 - **App Kill Switch 保持開；網路 Kill Switch 保持關**。
 
 ---
@@ -134,16 +134,20 @@ foreach($r in $roots){ if(Test-Path $r){ Get-ChildItem $r -Recurse -Filter *.exe
 ```
 - **★回讀驗證（必做）**：分割通道清單 + Kill Switch 清單各開來看，確認 **`FactSetVpnProxy` 在內**、且 **`excel.exe`/`python*`/`chrome`/`msedge`/`msedgewebview2`/瀏覽器一律不在內**；各截一張圖存證。
 
-### A-5. Smart App Control（SAC）★狀態變更：使用者於 2026-07-26 自行關閉(=0)
-**⚠️ 現況（2026-07-26）：遠端 SAC = `0`（關閉）——使用者自行關閉。** 對 FactSet 取數／零洩漏**無任何影響**（proxy/隧道/守衛/PAC 與 SAC 無關，SAC=0 下 proxy 更是必然能跑）。
-- **⚠️ 單程票**：SAC `1→0` 隨時可關，但 **`0→1` 需重設 Windows** 才能重開。故遠端目前**回不去 SAC=1**（除非重灌）。
-- **歷史（2026-07-25 實測，供參）**：當時 `SAC=1（強制）`，proxy 雖 NotSigned 仍於 07-25 22:38 在 SAC=1 下成功啟動 → 證明遠端 SAC 本來就**放行**這支未簽章 proxy（ISG 信譽足夠）。**當時結論是「遠端維持 SAC=1 較佳（防護+功能兼得）」**；惟使用者 07-26 另有考量自行關閉，屬 0-C 的使用者決策，AI 不代按、僅記錄。→ **所以遠端關 SAC 對 FactSet 並非必要（本來就放行），但既已關且無害，維持現狀。**
-- 對照本機：本機 07-22 切 SAC 強制時信譽未足→proxy 被擋→才關本機 SAC(=0)。兩台現皆 SAC=0。
-- 查 SAC（現應回 `0`）：
+### A-5. Smart App Control（SAC）★定論：兩台都必須關(=0)——這支 proxy 是「自編未簽章」程式
+**根因（2026-07-26 更正，推翻先前「遠端 SAC=1 放行」的誤判）**：`%LOCALAPPDATA%\FactSetVpnProxy\` 內的 proxy 是**自行用 C#（`.cs`）現場編譯的 `.exe`，不是 FactSet 官方二進位**。實機佐證：exe 僅 **15,360 bytes**、`CompanyName` 空白、`FileVersion=1.0.0.0`、**NotSigned**——典型自編小程式（官方檔會有公司名、正式版號、且經 FactSet 簽章、體積也大得多）。
+- **自編 + 未簽章 + 私有檔 → 全球普及度＝0 → ISG 永遠回 `unknown` → SAC 強制(=1)在任何機器都會封鎖它**。本機已實測：SAC=1 時 `Start-Process` 此 proxy 回「An Application Control policy has blocked this file」。
+- **⇒ 先前「遠端 SAC=1 放行」是誤判**：遠端那支只是「在 SAC 尚未強制時就啟動、之後一直沒被殺」的**倖存進程**（SAC 擋的是「啟動」，不會殺已在跑的）。**一旦被殺（VPN 斷 → App Kill Switch 連帶收掉 proxy、或手動 kill），SAC=1 下就再也起不回來 → PAC 連不到 → WinINET fail-open 退回 DIRECT → 台灣 IP 裸奔**。所以「SAC 開」不是防護、反而是洩漏地雷。
+- **⇒ 定論：兩台 SAC 都維持關(=0)**，並以 **`defender_harden.ps1` 作補償控制**（已於遠端 2026-07-26 執行：`PUA`/受控資料夾/網路防護 + 6 條不打到本活頁簿的 ASR 規則；其中「擋低信譽未簽章 exe」`01443614` 設 **AuditMode**、proxy 加 ASR 例外；**絕不開**會搞死巨集的 4 條 Office-ASR，見腳本末註）。
+- **⚠️ 單程票**：SAC `1→0` 隨時可關，`0→1` 需**重設 Windows**。兩台現皆 SAC=0，維持現狀、不要重開。
+- **唯一能讓 SAC 放行此 exe 的路**＝拿 code-signing 憑證**自簽這支 exe**（FactSet 不會幫簽——根本不是它的檔）；自簽後每日簽章偵測（Part C）才會變 `Valid`。
+- ⚠️ **`defender_harden.ps1` 編碼坑**：該檔含中文註解且**無 BOM**，本機系統代碼頁＝950(Big5) 的 PS5.1 會讀成亂碼→剖析失敗；已轉存為 **UTF-8 with BOM** 修好。另原腳本用 `Set-MpPreference` 逐條設 ASR（會整組覆蓋、只剩最後一條），已改為 **`Add-MpPreference`** 疊加，6 條規則才全到位。
+- 對照本機：本機 07-22 切 SAC 強制時同樣被擋→關本機 SAC(=0)。兩台一致。
+- 查 SAC（應回 `0`）：
 ```powershell
 (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' -EA SilentlyContinue).VerifiedAndReputablePolicyState  # 0關/1強制/2評估
 ```
-> ℹ️ 此前 SAC=1 時的顧慮「FactSet 更新 proxy exe→新 hash 一時無信譽被 SAC 擋」**現已不適用**（SAC=0，不再有簽章強制）。留作歷史參考。
+> ℹ️ **埠已定案固定**（遠端轉發 `3128`、`8765` 只供 PAC）；只有**重編 `.cs`** 才可能換埠。Kill Switch 也是**因 SAC=0 才安全**（App KS 開、網路 KS 關）——若 SAC=1，KS 收掉 proxy 後就救不回。
 
 ### A-6. 系統 DNS（不要動）
 NordLynx 網卡 DNS 維持 Nord 原廠 `103.86.96.100/99.100`；Google 網站靠瀏覽器 DoH(A-3)。改系統/網卡 DNS 在此環境不穩，**遠端一律不碰**。
@@ -164,7 +168,7 @@ Get-ChildItem 'C:\Github\Trading_Project\EZ_table0228\FactSet_Templates_20260710
 ---
 
 ## Part B — 這幾天怎麼修到定案（濃縮脈絡）
-- **B-1 SAC**：本機未簽章 proxy 被強制 SAC 擋→關本機 SAC。**遠端當時 SAC=1 反而放行**；後於 07-26 由使用者自行關閉=0（現況見 A-5）。
+- **B-1 SAC**：proxy 是自編未簽章 C# 程式（.cs→.exe、非 FactSet 官方）→ ISG 永不放行 → SAC=1 兩台都擋。本機早已因此關 SAC；遠端先前誤以為「SAC=1 放行」，其實只是倖存進程，07-26 更正並關閉=0（定論見 A-5）。
 - **B-2 WebView2 nativecloud 洩漏**：proxy 沒跑時 WebView2/瀏覽器直連 FactSet 閘道洩漏台灣 IP（FDSPipe 那半仍走美國＝「一半漏」）→守衛取數前把關 + proxy 必須存活(A-1)。
 - **B-3 VPN vs 瀏覽器 DNS**：Nord 挾持 DNS 害 Google→瀏覽器 DoH（Comet 無解捨棄）。改系統 DNS 不穩已放棄。
 - **B-4 NordVPN**：無 CLI；`nordvpn://connect`（連某美國）；登入走 OS 預設瀏覽器，**Comet 會吃掉 OAuth 回呼**→登入前把預設瀏覽器設 Edge，或把 `nordvpn://login...` 用 Edge/`Start-Process` 開；登入成功但 UI 卡＝重啟 NordVPN.exe(UI，非 service)。
@@ -175,9 +179,9 @@ Get-ChildItem 'C:\Github\Trading_Project\EZ_table0228\FactSet_Templates_20260710
 
 ## Part C — 簽章偵測 & SAC（回答使用者）
 - **每日簽章偵測「已內建」**：`VpnGuard_Open`→`DailySignatureCheck`，每日至多一次（`%TEMP%\vpnguard_sig_YYYYMMDD.flag`），`Get-AuthenticodeSignature` 變 `Valid` 就彈「可恢復 SAC（需重設 Windows）」。遠端同一份程式碼，開檔即自動偵測，無需另裝。
-- **注意「簽章 Valid」≠「SAC 放行」是兩件事**：proxy 仍 NotSigned；此前 SAC=1 時因 ISG 信譽放行，**現 SAC=0 更無簽章強制**(A-5)。簽章偵測是等 FactSet 真的出**數位簽章版**（更徹底、跨機一致）。
-- **恢復 SAC 是使用者手動決策**，且是重設 Windows 等級動作，巨集只通知不代做。
-- **遠端結論（已更新 2026-07-26）**：SAC 原本放行 proxy、當時建議保持開；但使用者已自行關閉(=0)。**FactSet 不受影響**；因 0→1 需重設 Windows，遠端維持現狀 SAC=0、不再動。
+- **注意「簽章 Valid」≠「SAC 放行」是兩件事**：proxy 是**自編未簽章程式**（A-5），普及度 0、**ISG 永不放行** → SAC=1 在任何機器都擋。**取得簽章的唯一途徑＝自己用 code-signing 憑證自簽此 exe**（FactSet 不會簽——這不是它的檔）；自簽後 `Get-AuthenticodeSignature` 才會 `Valid`。
+- **不建議重開 SAC**：除非先自簽此 exe，否則重開 SAC＝proxy 一被殺就救不回、IP 裸奔（A-5）。巨集只通知、不代做；重開 SAC 又是重設 Windows 等級動作。
+- **遠端結論（定論 2026-07-26）**：因 proxy 自編未簽章、SAC=1 必擋 → **兩台 SAC 都維持關(=0) + `defender_harden.ps1` 補償控制**。這是硬需求、不是使用者偏好。
 
 ---
 
@@ -200,7 +204,7 @@ Get-ChildItem 'C:\Github\Trading_Project\EZ_table0228\FactSet_Templates_20260710
 ```
 **判讀 / 已知狀態**：
 - FactSet + NordVPN(已登入)：**使用者已確認裝好**。
-- SAC：**已於 2026-07-26 由使用者關閉=0**(A-5)；對 FactSet 無影響，不用動。
+- SAC：**必須=0（已關）**——proxy 自編未簽章、SAC=1 會擋它啟動→被殺救不回→IP 裸奔(A-5)；不要重開。
 - **交接夾若不存在**：`_IP_Guard_Handoff` 內的 `leak_monitor*.ps1`/`defender_harden.ps1`（Part E 要用）可能沒複製過去 → **請使用者把整個 `_IP_Guard_Handoff` 資料夾複製到遠端同路徑**（不是只複製 2 本）。
 
 ### Phase 1 — 先把 proxy 拉起來並確認在聽（防洩漏第一關）
@@ -249,7 +253,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Github\Trading_Project\E
 
 ## Part F — 遠端專屬注意
 1. **執行模型**：PowerShell 在遠端跑(0-A)。
-2. **SAC**：遠端原可維持開(=1，放行 proxy)，惟使用者已於 2026-07-26 自行關閉(=0)——對 FactSet 無影響；0→1 需重設 Windows(A-5)。兩台現皆 SAC=0。
+2. **SAC 必須關(=0)**（兩台一致，定論見 A-5）：proxy 自編未簽章→ISG 永不放行→SAC=1 會擋它啟動、被殺救不回→IP 裸奔。已關 + `defender_harden.ps1` 補償。0→1 需重設 Windows，不要重開。
 3. **RDP 自我斷線**：網路 KS 關、不反向、別誤加程序(0-B)。
 4. **巨集能不能跑**：MOTW/信任中心是「開檔沒彈窗」的頭號嫌疑(A-7)。
 5. **交接夾要整個複製**（不只 2 本），否則 Part E 監視器不在。
@@ -265,5 +269,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Github\Trading_Project\E
 > 我要把本機的 FactSet IP 防護環境複製到遠端 111.185.192.56（主機名 GENE_AI-LAB），使兩台一致。請照
 > `...\EZ_table0228\FactSet_Templates_20260710\_IP_Guard_Handoff\REMOTE_SETUP_111.185.192.56.md`
 > 執行：先跑 Part D Phase 0 前提盤點回報，再依 Phase 1→4 設定，最後 Part E 驗零洩漏。
-> 已知：FactSet+NordVPN 已裝已登入；**遠端 SAC 已由使用者關閉=0（2026-07-26），對 FactSet 無影響、不用再動**。
+> 已知：FactSet+NordVPN 已裝已登入；**proxy 是自編未簽章程式→SAC 兩台都必須關(=0)+defender_harden 補償；SAC 開＝proxy 被殺救不回、IP 裸奔（定論見 A-5）。遠端已關=0，不要重開**。
 > 安全紅線：excel/python/瀏覽器不加分割通道；網路 Kill Switch 保持關、不選反向模式（會斷我 RDP）；SAC 不動。

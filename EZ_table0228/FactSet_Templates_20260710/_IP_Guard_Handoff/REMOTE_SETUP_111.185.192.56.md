@@ -100,7 +100,7 @@ NordVPN 全域挾持系統 DNS，對 Google 系網域回假 IP `192.0.0.88`→Ch
 |---|---|---|
 | Edge | HKLM 政策 `secure`+Cloudflare | 政策寫（見下） |
 | Chrome | UI 設 Cloudflare | **改用政策寫**（更確定） |
-| Comet | **無 DoH 引擎→捨棄** | 遠端同樣**不用 Comet 開 Google/NordVPN 登入** |
+| Comet | **無 DoH 引擎→捨棄** | 遠端**已裝**（見 F-8）但預設瀏覽器＝Edge；**不用 Comet 開 Google/NordVPN 登入** |
 
 **★HKLM 需「系統管理員身分」；PAC(A-2) 是 HKCU 一般身分。兩者範圍不同不可混**：非提權 session 寫 HKLM 會 access-denied 靜默失敗；若整個改用「另一個 admin 帳號」的提權 shell 跑，A-2 的 HKCU PAC 會落在 admin 的 hive、不是 Excel 使用者的 hive→factset.com 不被導向→洩漏。**正解：HKLM DoH 用「與 Excel 同一使用者」的提權 PowerShell 寫；HKCU PAC 用一般身分寫。**
 ```powershell
@@ -254,6 +254,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Github\Trading_Project\E
 5. **交接夾要整個複製**（不只 2 本），否則 Part E 監視器不在。
 6. **proxy 存活是硬性防洩漏前提**（A-1），不只是能不能取數。
 7. books 已複製，**不重新注入 VBA**；日後本機守衛升級再同步。
+8. **Comet 已安裝但預設仍為 Edge（2026-07-26 實測，安全）**：主程式在 `C:\Program Files\Perplexity\Comet\Application\Comet.exe`（版本 150.0.7871.230；`LocalAppData\Perplexity\Comet\User Data` 僅設定檔，07-25 仍有用），已註冊 HKLM `App Paths\comet.exe`。但 `https`/`http`/`.html` 的 UserChoice **全綁 `MSEdgeHTM`（Edge）**，故系統開連結、NordVPN OAuth 回呼、reCAPTCHA 都走 Edge，Comet 無 DoH 的風險**不會觸發**。
+   - ⚠️ **兩條紅線**：(a) **別把預設瀏覽器改成 Comet**（改了→Google/reCAPTCHA 因無 DoH 壞、NordVPN 登入回呼被 Comet 吃）；(b) **別用 Comet 開 NordVPN/Google 登入**。一般網頁用 Comet 無妨（走台灣 ISP 直出，與 FactSet 無關）；不需移除。
+   - 查法：`(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice').ProgId` 應回 `MSEdgeHTM`。
 
 ---
 
